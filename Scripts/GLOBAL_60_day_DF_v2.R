@@ -1,12 +1,11 @@
 # 1A - LOAD PACKAGES -----------------------------------------------------------
-#con <- file("30_day_DF.log")
-#sink(con, append=TRUE)
-#sink(con, append=TRUE, type="message")
 
-#set Java heap size to max
-options(java.parameters = "-Xmx24g")
-Sys.setenv(JAVA_HOME='C:\\Program Files\\Java\\jdk1.8.0_102')
-Sys.setenv("R_ZIPCMD" = "C:/Rtools/bin/zip.exe")
+con <- file("60_day_DF.log")
+sink(con, append=TRUE)
+sink(con, append=TRUE, type="message")
+
+# This will echo all input and not truncate 150+ character lines...
+#source("C:/Users/SCIP2/Documents/Demand Forecasting II/Scripts60_day_DF_v4cl.R", echo=TRUE, max.deparse.length=10000)
 
 #set working directory (all output / input files are stored here)
 setwd("~/Demand Forecasting III/Archive")
@@ -26,205 +25,246 @@ library(cowsay, lib.loc = "C:/Program Files/R/Libraries")
 #set random seed for consistent RF results
 set.seed(666)
 
-#set current day for naming
-current.run <- Sys.Date()
-save(current.run, file = 'current run.saved')
-
 # 2A - LOAD DATA ---------------------------------------------------------------
-fresh.data <- F
-save(fresh.data, file = 'fresh.data.saved')
+message('2A - START')
+load('fresh.data.saved')
 
-#query new data: connection details to PMP
-jcc = JDBC("com.ibm.db2.jcc.DB2Driver",
-           "C:/Users/SCIP2/Documents/DB2 Driver/db2jcc4.jar")
 
-load('credentials.saved')
+if(fresh.data) {
+  load('current run.saved')
+  
+  if(file.exists('last run.saved')) {
+    load('last run.saved')
+  } else {
+    message('A NEW EPOCH DAWNS')
+    skip <- F
+  }
+  
+  load(paste0('data in progress ', lubridate::ymd(current.run), '.saved'))
+  master <- data
+  message('2A - FRESH DATA, ALL GOOD')
+}
 
-conn = dbConnect(jcc,
-                 as.character(credentials[3]),
-                 user=as.character(credentials[1]),
-                 password=as.character(credentials[2]))
-rm(credentials)
-
-#OPEN SEAT TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_T")
-OPNSET_T <- fetch(rs, -1)
-
-##new line: read in mapping table for country code, dump after filter
-load("~/Demand Forecasting III/Templates/ctry.saved")
-
-#couldn't get SQL filters to work in original DB2 query without blowing it up ;__;
-OPNSET_T <- tbl_df(OPNSET_T) %>%
-  left_join(ctry, by = c('WRK_CNTRY_CD' = 'CTRY')) %>%
-  filter(SET_TYP_CD == 'MP', 
-         RDC_CTRY_NAME %in% c('United States', 'Canada',
-                              'China', 'Mexico', 'Brazil', 'United Kingdom', 'Spain', 
-                              'France', 'India', 'Japan', 'Australia', #'Germany',
-                              'Netherlands', 'Sweden', 'Singapore', 
-                              'Korea, Republic of', 'South Africa', 'Italy')) %>%
-  select(-RDC_CTRY_NAME, -URN_RDC_CTRY)
-
-#OPEN POSITION TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_T")
-OPNSET_POS_T <- fetch(rs, -1)
-
-save(OPNSET_POS_T, file = paste0('OPNSET_POS_T_', '.saved'))
-
-#OPEN DETAIL TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_DTL_T")
-OPNSET_DTL_T <- fetch(rs, -1)
-
-#STATUS CODE REF TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.POS_STAT_RESN_T")
-POS_STAT_RESN_T <- fetch(rs, -1)
-
-#CONTRACT ORG REF TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRCT_OWNG_ORG_T")
-CNTRCT_OWNG_ORG_T <- fetch(rs, -1)
-
-CNTRCT_OWNG_ORG_T <- CNTRCT_OWNG_ORG_T %>%
-  mutate(Unit = ifelse(grepl('GBS', CNTRCT_OWNG_ORG_NM), 'GBS', 
-                       ifelse(grepl('GTS', CNTRCT_OWNG_ORG_NM), 'GTS', 
-                              'OTHER')),
-         Unit = as.factor(Unit))
-
-#CONTRACT TYPE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRCT_TYP_T")
-CNTRCT_TYP_T <- fetch(rs, -1)
-
-#CONTRACT TYPE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.INDSTR_T")
-INDSTR_T <- fetch(rs, -1)
-INDSTR_T$DEL_FLG <- NULL
-
-#COUNTRY SECUTIRY CLEARANCE CODE REF
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRY_SEC_CLRNCE_T")
-CNTRY_SEC_CLRNCE_T <- fetch(rs, -1)
-
-#COUNTRY SECUTIRY CLEARANCE CODE REF
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.SEC_CLRNCE_TYP_T")
-SEC_CLRNCE_TYP_T <- fetch(rs, -1)
-
-#OPNSET_POS_CAND_T
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_CAND_T")
-OPNSET_POS_CAND_T <- fetch(rs, -1)
-
-#OPNSET_POS_CAND_STAT
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_CAND_STAT_T")
-OPNSET_POS_CAND_STAT_T <- fetch(rs, -1)
-
-#CAND_STAT_NM
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CAND_STAT_T")
-CAND_STAT_T <- fetch(rs, -1)
-
-#CAND_T
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CAND_T")
-CAND_T <- fetch(rs, -1)
-setnames(CAND_T, 'CNTRY_CD', 'cand.ctry')
-
-#APP USR TBL
-rs <- dbSendQuery(conn,"SELECT * FROM ACLADMIN.APP_USR_T")
-APP_USR_T <- fetch(rs, -1)
-
-#MERGES
-OPNSET_T <- OPNSET_T %>%
-  left_join(APP_USR_T %>% 
-              select(APP_USR_ID, NOTES_ID), 
-            by = c('OWNR_USR_ID' = 'APP_USR_ID')) %>%
-  rename(OWNER_NOTES_ID = NOTES_ID)
-
-OPNSET_T <- OPNSET_T %>%
-  left_join(APP_USR_T %>% 
-              select(APP_USR_ID, NOTES_ID), 
-            by = c('DELG_USR_ID' = 'APP_USR_ID')) %>%
-  rename(DELG_NOTES_ID = NOTES_ID)
-
-security <-  CNTRY_SEC_CLRNCE_T %>%
-  left_join(SEC_CLRNCE_TYP_T, by = "SEC_CLRNCE_TYP_ID") %>%
-  select(CNTRY_SEC_CLRNCE_ID, SEC_CLRNCE_TYP_DESC)
-
-master <- OPNSET_T %>%
-  left_join(OPNSET_POS_T, 
-            by = 'OPNSET_ID') %>%
-  left_join(OPNSET_DTL_T, 
-            by = "OPNSET_ID") %>%
-  left_join(POS_STAT_RESN_T %>%
-              select(STAT_RESN_CD, STAT_RESN_DESC),
-            by = 'STAT_RESN_CD') %>%
-  left_join(CNTRCT_OWNG_ORG_T %>%
-              select(CNTRCT_OWNG_ORG_ID, CNTRCT_OWNG_ORG_NM, Unit),
-            by = 'CNTRCT_OWNG_ORG_ID') %>%
-  left_join(CNTRCT_TYP_T %>%
-              select(CNTRCT_TYP_ID, CNTRCT_TYP_DESC), 
-            by = 'CNTRCT_TYP_ID') %>%
-  left_join(INDSTR_T,
-            by = 'INDSTR_ID') %>%
-  left_join(security, 
-            by = "CNTRY_SEC_CLRNCE_ID") %>%
-  mutate(STAT_RESN_DESC.og = STAT_RESN_DESC,
-         STAT_RESN_DESC = replace(STAT_RESN_DESC, 
-                                  STAT_RESN_CD %in% c('WB', 'WE', 'WG') & 
-                                    PREF_FULFLMNT_CHNL_CD == 'SUBC',
-                                  'Staffed by contractor/other'))
-
-#map candidate features
-candidate.type <- OPNSET_POS_CAND_STAT_T %>%
-  left_join(CAND_STAT_T[1:2], 
-            by = c('CAND_OPNSET_STAT_ID' = 'CAND_STAT_ID'))
-
-candidate <- tbl_df(OPNSET_POS_CAND_T) %>%
-  filter(OPNSET_ID %in% master$OPNSET_ID) %>%
-  left_join(candidate.type, by = 'OPNSET_POS_CAND_ID') %>%
-  left_join(CAND_T %>%
-              select(CAND_ID, cand.ctry, CAND_SRC_CD), 
-            by = 'CAND_ID')
-
-save(master, file = paste0('master ', current.run,'.saved'))
-
-# 2B - DATA REFRESH ----------------------------------------------------
-#skip if first run-through
-skip <- file.exists('last.run.saved')
-
-if(skip) {
+if(!fresh.data) {
+  message('2A - NO FRESH DATA, REPULLING EVERYTHING')
+  lubridate::ymd(current.run) <- Sys.Date()
+  #query new data: connection details to PMP
+  jcc = JDBC("com.ibm.db2.jcc.DB2Driver",
+             "C:/Users/SCIP2/Documents/DB2 Driver/db2jcc4.jar")
+  load('credentials.saved')
+  
+  conn = dbConnect(jcc,
+                   as.character(credentials[3]),
+                   user=as.character(credentials[1]),
+                   password=as.character(credentials[2]))
+  rm(credentials)
+  
+  #OPEN SEAT TABLE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.OPNSET_T")
+  OPNSET_T <- fetch(rs,-1)
+  
+  #couldn't get SQL filters to work in original DB2 query without blowing it up ;__;
+  OPNSET_T <- tbl_df(OPNSET_T) %>%
+    left_join(ctry, by = c('WRK_CNTRY_CD' = 'CTRY')) %>%
+    filter(SET_TYP_CD == 'MP', 
+           RDC_CTRY_NAME %in% c('United States', 'Canada',
+                                'China', 'Mexico', 'Brazil', 'United Kingdom', 'Spain', 
+                                'France', 'India', 'Japan', 'Australia', #'Germany',
+                                'Netherlands', 'Sweden', 'Singapore', 
+                                'Korea, Republic of', 'South Africa', 'Italy')) %>%
+    select(-RDC_CTRY_NAME, -URN_RDC_CTRY)
+  
+  #OPEN POSITION TABLE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.OPNSET_POS_T")
+  OPNSET_POS_T <- fetch(rs,-1)
+  
+  save(OPNSET_POS_T, file = paste0('OPNSET_POS_T_', lubridate::ymd(current.run), '.saved'))
+  
+  #OPEN DETAIL TABLE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.OPNSET_DTL_T")
+  OPNSET_DTL_T <- fetch(rs,-1)
+  
+  #STATUS CODE REF TABLE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.POS_STAT_RESN_T")
+  POS_STAT_RESN_T <- fetch(rs,-1)
+  
+  #CONTRACT ORG REF TABLE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.CNTRCT_OWNG_ORG_T")
+  CNTRCT_OWNG_ORG_T <- fetch(rs,-1)
+  
+  CNTRCT_OWNG_ORG_T$Unit <- with(CNTRCT_OWNG_ORG_T, as.factor(ifelse(
+    grepl('GBS', CNTRCT_OWNG_ORG_NM),
+    'GBS',
+    ifelse(grepl('GTS', CNTRCT_OWNG_ORG_NM), 'GTS',
+           'OTHER')
+  )))
+  
+  #CONTRACT TYPE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.CNTRCT_TYP_T")
+  CNTRCT_TYP_T <- fetch(rs,-1)
+  
+  #CONTRACT TYPE
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.INDSTR_T")
+  INDSTR_T <- fetch(rs,-1)
+  INDSTR_T$DEL_FLG <- NULL
+  
+  #COUNTRY SECUTIRY CLEARANCE CODE REF
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.CNTRY_SEC_CLRNCE_T")
+  CNTRY_SEC_CLRNCE_T <- fetch(rs,-1)
+  
+  #COUNTRY SECUTIRY CLEARANCE CODE REF
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.SEC_CLRNCE_TYP_T")
+  SEC_CLRNCE_TYP_T <- fetch(rs,-1)
+  
+  
+  #OPNSET_POS_CAND_T
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.OPNSET_POS_CAND_T")
+  OPNSET_POS_CAND_T <- fetch(rs,-1)
+  
+  
+  #OPNSET_POS_CAND_STAT
+  rs <-
+    dbSendQuery(conn, "SELECT * FROM BCSPMP.OPNSET_POS_CAND_STAT_T")
+  OPNSET_POS_CAND_STAT_T <- fetch(rs,-1)
+  
+  #CAND_STAT_NM
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.CAND_STAT_T")
+  CAND_STAT_T <- fetch(rs,-1)
+  
+  #CAND_T
+  rs <- dbSendQuery(conn, "SELECT * FROM BCSPMP.CAND_T")
+  CAND_T <- fetch(rs,-1)
+  setnames(CAND_T, 'CNTRY_CD', 'cand.ctry')
+  
+  #APP USR TBL
+  rs <- dbSendQuery(conn,"SELECT * FROM ACLADMIN.APP_USR_T")
+  APP_USR_T <- fetch(rs, -1)
+  
+  #save(OPNSET_POS_CAND_T, OPNSET_POS_CAND_STAT_T, CAND_STAT_T, file = 'candidate tbls.saved')
+  
+  #MERGES
+  OPNSET_T <- OPNSET_T %>%
+    left_join(APP_USR_T %>% select(APP_USR_ID, NOTES_ID), by = c('OWNR_USR_ID' = 'APP_USR_ID')) %>%
+    rename(OWNER_NOTES_ID = NOTES_ID)
+  
+  OPNSET_T <- OPNSET_T %>%
+    left_join(APP_USR_T %>% select(APP_USR_ID, NOTES_ID), by = c('DELG_USR_ID' = 'APP_USR_ID')) %>%
+    rename(DELG_NOTES_ID = NOTES_ID)
+  
+  master <- left_join(OPNSET_T, OPNSET_POS_T, by = "OPNSET_ID")
+  
+  master <- left_join(master, OPNSET_DTL_T, by = "OPNSET_ID")
+  
+  master <-
+    left_join(master, POS_STAT_RESN_T[c('STAT_RESN_CD', 'STAT_RESN_DESC')], by = "STAT_RESN_CD")
+  
+  master <-
+    left_join(master, CNTRCT_OWNG_ORG_T[c("CNTRCT_OWNG_ORG_ID", "CNTRCT_OWNG_ORG_NM", "Unit")], by = 'CNTRCT_OWNG_ORG_ID')
+  
+  master <-
+    left_join(master, CNTRCT_TYP_T[c('CNTRCT_TYP_ID', 'CNTRCT_TYP_DESC')], by = 'CNTRCT_TYP_ID')
+  
+  master <- left_join(master, INDSTR_T, by =  "INDSTR_ID")
+  
+  security <-
+    left_join(CNTRY_SEC_CLRNCE_T, SEC_CLRNCE_TYP_T, by = "SEC_CLRNCE_TYP_ID")
+  security <-
+    security[c('CNTRY_SEC_CLRNCE_ID', 'SEC_CLRNCE_TYP_DESC')]
+  
+  master <- left_join(master, security, by = "CNTRY_SEC_CLRNCE_ID")
+  
+  #recode some pos with STATUS CODES and FULFILLMENT CHANNEL that indicates SUBK
+  master <- tbl_df(master) %>%
+    mutate(
+      STAT_RESN_DESC.og = STAT_RESN_DESC,
+      STAT_RESN_DESC = replace(
+        STAT_RESN_DESC,
+        STAT_RESN_CD %in% c('WB', 'WE', 'WG') &
+          PREF_FULFLMNT_CHNL_CD == 'SUBC',
+        'Staffed by contractor/other'
+      )
+    )
+  
+  #map candidate features
+  candidate <- tbl_df(OPNSET_POS_CAND_T) %>%
+    filter(OPNSET_ID %in% master$OPNSET_ID)
+  
+  candidate.type <-
+    left_join(OPNSET_POS_CAND_STAT_T,
+              CAND_STAT_T[1:2],
+              by = c('CAND_OPNSET_STAT_ID' = 'CAND_STAT_ID'))
+  
+  candidate <-
+    left_join(candidate, candidate.type, by = 'OPNSET_POS_CAND_ID')
+  
+  candidate <-
+    left_join(candidate, CAND_T[c('CAND_ID', 'cand.ctry', 'CAND_SRC_CD')], by = 'CAND_ID')
+  
+  save(master, file = paste0('master ', lubridate::ymd(current.run), '.saved'))
+  
+  
+  # 2B - DATA REFRESH ----------------------------------------------------
   #bring up the last date the model was run
   load('last run.saved')
-  paste0('Last model run: ', current.run - last.run, ' day(s) ago')
+  
+  #CLARK EDIT need to load the training data
+  load(paste0('60 day train', lubridate::ymd(last.run), '.saved'))
+  
+  train.new <- train
+  
+  #paste0('Last model run: ', lubridate::ymd(current.run) - last.run, ' day(s) ago')
   #load last test set
-  load(paste0('30 day testing', last.run, '.saved'))
+  
+  #train.new <- train
+  
+  load(paste0('60 day testing', lubridate::ymd(last.run), '.saved'))
   #get position ids from last test set
+  
   last.pos <- unique(testing$OPNSET_POS_ID)
   
   #grab fields to update in testing data from last query
   actualizer <- tbl_df(master) %>%
     filter(OPNSET_POS_ID %in% last.pos) %>%
     select(OPNSET_POS_ID, STAT_RESN_DESC, WTHDRW_CLOS_T) %>%
-    mutate(STAT_RESN_DESC = ifelse(is.na(STAT_RESN_DESC), F, 
-                                   STAT_RESN_DESC == 'Staffed by contractor/other'), 
-           WTHDRW_CLOS_T = ymd(str_sub(WTHDRW_CLOS_T, 1, 10)),
-           #set status to 'false' if position did not close
-           STAT_RESN_DESC = replace(STAT_RESN_DESC, is.na(WTHDRW_CLOS_T), F))
+    mutate(
+      STAT_RESN_DESC = ifelse(
+        is.na(STAT_RESN_DESC),
+        F,
+        STAT_RESN_DESC == 'Staffed by contractor/other'
+      ),
+      WTHDRW_CLOS_T = ymd(str_sub(WTHDRW_CLOS_T, 1, 10)),
+      #set status to 'false' if position did not close
+      STAT_RESN_DESC = replace(STAT_RESN_DESC, is.na(WTHDRW_CLOS_T), F)
+    )
   
   #drop vars about to be updated
   test.old <- tbl_df(testing) %>%
-    select(-STAT_RESN_DESC, -WTHDRW_CLOS_T)
+    select(-STAT_RESN_DESC,-WTHDRW_CLOS_T)
   
   #update the values by merging the 2 tables
-  actualizer <- left_join(test.old, actualizer, by = 'OPNSET_POS_ID')
+  actualizer <-
+    merge(test.old, actualizer, 'OPNSET_POS_ID', all.x = T)
   #now there's 2 paths:
   #A) position was CLOSED / WITHDRAWN since the last run: we want to STACK with OLD TRAINING
   #B) positions is STILL OPEN since last run: we want to stack FROZEN VIEW with OLD TRAINING and feed last query data to NEW TESTING
   
   #LOAD LAST TRAINING:
-  load(paste0('30 day train', last.run, '.saved'))
+  #clark edit
+  # load(paste0('60 day train', last.run, '.saved'))
+  train.new <- train
+  
+  load(paste0('60 day train', lubridate::ymd(last.run), '.saved'))
   #stack last run's testing set
   train <- rbind(train, actualizer)
-  save(train, file = paste0('30 day train', current.run, '.saved'))
+  
+  train.new <- train
+  
+  save(train, file = paste0('60 day train', lubridate::ymd(current.run), '.saved'))
   
   #select POSITIONS STILL OPEN FROM LAST UPDATE
-  open.test <- actualizer %>% 
-    filter(is.na(WTHDRW_CLOS_T)) %>%
-    select(OPNSET_POS_ID) %>%
-    left_join(master, by = 'OPNSET_POS_ID')
+  open.test <- filter(actualizer, is.na(WTHDRW_CLOS_T)) %>%
+    select(OPNSET_POS_ID)
+  open.test <- merge(open.test, master, by = 'OPNSET_POS_ID', all.x = T)
   
   #filter query to select only new data for analysis (STUFF NOT ALREADY IN 'TRAINING')
   new.pos <- master %>%
@@ -232,182 +272,259 @@ if(skip) {
   
   #stack open pos from LAST RUN and new data from CURRENT QUERY
   tbls <- list(open.test, new.pos)
-  tbls <- lapply(tbls, function(x) 
+  tbls <- lapply(tbls, function(x)
     as.data.frame(lapply(x, as.character)))
-  tbls <- plyr::rbind.fill(tbls)
+  library(plyr)
+  tbls <- rbind.fill(tbls)
+  detach("package:plyr", unload = TRUE)
   
   #this is the new data that needs to flow thru the next sections to generate features
   #we will need to split into testing/training AFTER all features are built and then stack where needed
-  save(tbls, file = paste0('30 day new positions raw', current.run, ',saved'))
+  train.new <- train
+  save(tbls, file = paste0('60 day new positions raw', lubridate::ymd(current.run), ',saved'))
   master <- tbls
+  
+  # 2C - DATA PREP ----------------------------------------------------------
+  start <- proc.time()
+  save(start, file = 'start time.saved')
+  rm(start)
+  #select which variables to keep
+  vars <-
+    c(
+      "OPNSET_ID",
+      "OPNSET_POS_ID",
+      "STAT_RESN_DESC",
+      "INDSTR_NM",
+      "STRT_DT",
+      "END_DT",
+      "CRE_T",
+      "LST_UPDT_T",
+      'OPN_T',
+      "WTHDRW_CLOS_T",
+      "CNTRCT_OWNG_ORG_NM",
+      "Unit",
+      "BND_LOW",
+      "BND_HIGH",
+      "PAY_TRVL_IND",
+      "WRK_RMT_IND",
+      "CNTRCT_TYP_DESC",
+      "FULFILL_RISK_ID",
+      "SEC_CLRNCE_TYP_DESC",
+      "OWNG_CNTRY_CD",
+      "OWNER_NOTES_ID", 
+      "DELG_NOTES_ID",
+      "WRK_CNTRY_CD",
+      "JOB_ROL_TYP_DESC",
+      "SKLST_TYP_DESC",
+      "SET_TYP_CD",
+      "WRK_CTY_NM",
+      "URG_PRIRTY_IND",
+      "PREF_FULFLMNT_CHNL_CD",
+      "NEED_SUB_IND"
+    )
+  
+  #drop variables
+  data <- master[vars]
+  
+  #set proper data types
+  #get rid of the &^%!@#%$@ trailing spaces in JRSS fields....ugh
+  #(factors)
+  facts <-
+    c(
+      "OPNSET_POS_ID",
+      "STAT_RESN_DESC",
+      "INDSTR_NM",
+      "CNTRCT_OWNG_ORG_NM",
+      "OWNER_NOTES_ID", 
+      "DELG_NOTES_ID",
+      "Unit",
+      "PAY_TRVL_IND",
+      "WRK_RMT_IND",
+      "CNTRCT_TYP_DESC",
+      "FULFILL_RISK_ID",
+      "BND_LOW",
+      "BND_HIGH",
+      "SEC_CLRNCE_TYP_DESC",
+      "OWNG_CNTRY_CD",
+      "WRK_CNTRY_CD",
+      "JOB_ROL_TYP_DESC",
+      "SKLST_TYP_DESC",
+      "SET_TYP_CD",
+      "WRK_CTY_NM",
+      'URG_PRIRTY_IND'
+    )
+  data[facts] <-
+    lapply(data[facts], function(x)
+      as.factor(str_trim(x)))
+  rm(facts)
+  
+  #recode relevant variables to binary
+  #urgent = TRUE
+  data$URG_PRIRTY_IND <- with(data, URG_PRIRTY_IND == 'Y')
+  
+  #contractor = TRUE (double check AFFL / SUBC interpretation valid)
+  data$PREF_FULFLMNT_CHNL_CD <-
+    with(data, PREF_FULFLMNT_CHNL_CD == 'SUBC')
+  
+  #need subk = TRUE
+  data$NEED_SUB_IND <- with(data, NEED_SUB_IND == 'Y')
+  
+  #contractor position = TRUE; this is target
+  data$STAT_RESN_DESC <-
+    with(data,
+         ifelse(
+           is.na(STAT_RESN_DESC),
+           F,
+           STAT_RESN_DESC == 'Staffed by contractor/other'
+         ))
+  
+  #pay travel / lodging
+  data$PAY_TRVL_IND <- with(data, PAY_TRVL_IND == 'Y')
+  
+  #Work remotely
+  data$WRK_RMT_IND <- with(data, WRK_RMT_IND == 'Y')
+  
+  # 2D - DATE CLEANUP -------------------------------------------------------
+  #use black magick and blood sacrifices to deal with projecting / scanning into other years (dec 15 -> jan 16)
+  month.vars <-
+    c("STRT_DT",
+      "END_DT",
+      "CRE_T",
+      "LST_UPDT_T",
+      'OPN_T',
+      "WTHDRW_CLOS_T")
+  
+  data[month.vars] <-
+    lapply(data[month.vars], function(x)
+      ymd(str_sub(x, 1, 10)))
+  
+  #might not use these (??) - resets these to the first of the month for any projection stuffs
+  data$Created.floor <- with(data, floor_date(CRE_T, 'month'))
+  #in Natalie's 2015 file this was 'original start date'. Assuming this is the same thing (???)
+  data$OG.Start.floor <- with(data, floor_date(STRT_DT, 'month'))
+  data$Close.floor <- with(data, floor_date(WTHDRW_CLOS_T, 'month'))
+  data$Close.week <- with(data, floor_date(WTHDRW_CLOS_T, 'week'))
+  
+  #this is AGE OF RECORD (how long has it been sitting in the system?)
+  to.today <- function(date) {
+    today <- lubridate::ymd(current.run)
+    days <- as.integer(round(difftime(today, date, units = 'days'),
+                             digits = 0))
+    return(days)
+  }
+  data$record.age <- to.today(data$CRE_T)
+  
+  #create lead days var (time btwn creation to expected start date)
+  lead.time <- function(created, start) {
+    days <- as.integer(round(difftime(start, created, units = 'days'),
+                             digits = 0))
+    return(days)
+  }
+  
+  data$Lead.time.days <- with(data, lead.time(CRE_T, STRT_DT))
+  
+  #position requests created AFTER work started (???)
+  time.vortex <- filter(data, CRE_T > STRT_DT)
+  
+  #needed w/in 30 days
+  from.today <- function(date) {
+    today <- lubridate::ymd(current.run)
+    days <- as.integer(round(difftime(date, today, units = 'days'),
+                             digits = 0))
+    return(days)
+  }
+  data$needed30.days <- data$Lead.time.days <= 30
+  
+  #length of project
+  day.diff <- function(start, end) {
+    days <- as.integer(round(difftime(end, start, units = 'days'),
+                             digits = 0))
+    return(days)
+  }
+  
+  data$project.duration <- with(data, day.diff(STRT_DT, END_DT))
+  
+  
+  #put data for prediction into separate df and save for later
+  filter30 <- function(start.date) {
+    day30 <- lubridate::ymd(current.run) + days(30)
+    flag <- start.date <= day30
+    return(flag)
+  }
+  
+  filter60 <- function(start.date) {
+    day30 <- lubridate::ymd(current.run) + days(31)
+    day60 <- day30 + days(30)
+    flag <- start.date %within% interval(day30, day60)
+    return(flag)
+  }
+  
+  
+  # 2E - CANDIDATE MAPPING --------------------------------------------------
+  #set up helper function for NA values from casting
+  replacer <- function(x) {
+    values <- replace(x, is.na(x), 0)
+    return(values)
+  }
+  
+  candidate$OPNSET_ID <- as.factor(as.character(candidate$OPNSET_ID))
+  #get start date into candidate table
+  candidate <-
+    left_join(candidate, unique(data[c('OPNSET_ID', 'OG.Start.floor')]), by = 'OPNSET_ID')
+  
+  #filter to grab the last available status 1 MONTH BEFORE START DATE
+  candidate <- candidate %>%
+    mutate(CAND_OPNSET_STAT_T = ymd_hms(CAND_OPNSET_STAT_T),
+           start.hms = ymd_hms(paste(OG.Start.floor, '00:00:00'))) %>%
+    group_by(OPNSET_POS_CAND_ID, OPNSET_ID) %>%
+    filter(CAND_OPNSET_STAT_T < start.hms,
+           CAND_OPNSET_STAT_T == max(CAND_OPNSET_STAT_T))
+  
+  candidate <- unique(candidate)
+  
+  #how many candidates per SEAT
+  candidate.count <- candidate %>%
+    group_by(OPNSET_ID, OG.Start.floor) %>%
+    summarise(candidate.count = length(unique(OPNSET_POS_CAND_ID)),
+              csa.src = sum(CAND_SRC_CD == 'C')) %>%
+    mutate(csa.src = replacer(csa.src))
+  
+  #how many candidates per SEAT DESCRIPTION CODE
+  candidate.type <- candidate %>%
+    group_by(OPNSET_ID, OG.Start.floor, CAND_STAT_NM) %>%
+    summarise(candidate.type = length(unique(OPNSET_POS_CAND_ID))) %>%
+    group_by(OPNSET_ID, OG.Start.floor) %>%
+    spread(CAND_STAT_NM, candidate.type) %>%
+    mutate_each(funs(replacer))
+  
+  candidate.count <-
+    left_join(candidate.count,
+              candidate.type,
+              by = c('OPNSET_ID', 'OG.Start.floor'))
+  candidate.count <- candidate.count %>%
+    mutate(active.cands = (candidate.count - Confirmed - Withdrawn - `<NA>`) /
+             candidate.count)
+  
+  #map back into the data
+  data <-
+    left_join(data, candidate.count, by = c('OPNSET_ID', 'OG.Start.floor'))
+  candidate.vars <-
+    setdiff(colnames(candidate.count), c('OPNSET_ID', 'OG.Start.floor'))
+  
+  data[candidate.vars] <- lapply(data[candidate.vars], replacer)
+  
+  save(data, candidate.vars, filter60, file = paste0('data in progress ', lubridate::ymd(current.run), '.saved'))
 }
-# 2C - DATA PREP ----------------------------------------------------------
-start <- proc.time()
-save(start, file = 'start time.saved')
-rm(start)
-#select which variables to keep
-vars <- c("OPNSET_ID", "OPNSET_POS_ID", "STAT_RESN_DESC", "INDSTR_NM", "STRT_DT", "END_DT", "CRE_T", 
-          "LST_UPDT_T", 'OPN_T', "WTHDRW_CLOS_T", "CNTRCT_OWNG_ORG_NM",  "Unit",
-          "BND_LOW", "BND_HIGH", "PAY_TRVL_IND", "WRK_RMT_IND", "CNTRCT_TYP_DESC", 
-          "FULFILL_RISK_ID", "SEC_CLRNCE_TYP_DESC", "OWNG_CNTRY_CD", "OWNER_NOTES_ID", "DELG_NOTES_ID", "WRK_CNTRY_CD", 
-          "JOB_ROL_TYP_DESC", "SKLST_TYP_DESC", "SET_TYP_CD", "WRK_CTY_NM", "URG_PRIRTY_IND", 
-          "PREF_FULFLMNT_CHNL_CD", "NEED_SUB_IND")
-
-#drop variables
-data <- master %>%
-  select_(.dots = vars)
-
-#this is AGE OF RECORD (how long has it been sitting in the system?)
-to.today <- function(date) {
-  today <- current.run
-  days <- as.integer(
-    round(
-      difftime(today, date, units = 'days'),
-      digits = 0)
-  )
-  return(days)
-}
-
-#create lead days var (time btwn creation to expected start date)
-lead.time <- function(created, start) {
-  days <- as.integer(
-    round(
-      difftime(start, created, units = 'days'),
-      digits = 0)
-  )
-  return(days)
-}
-
-#needed w/in 30 days
-from.today <- function(date) {
-  today <- current.run
-  days <- as.integer(
-    round(
-      difftime(date, today, units = 'days'),
-      digits = 0)
-  )
-  return(days)
-}
-
-#length of project
-day.diff <- function(start, end) {
-  days <- as.integer(
-    round(
-      difftime(end, start, units = 'days'),
-      digits = 0)
-  )
-  return(days)
-}
-
-#set proper data types
-#get rid of the &^%!@#%$@ trailing spaces in JRSS fields....ugh
-#recode relevant variables to binary
-#STAT_RESN_DESC: contractor position = TRUE; this is target
-data <- data %>%
-  mutate_at(vars(STRT_DT, END_DT, CRE_T, LST_UPDT_T, OPN_T, WTHDRW_CLOS_T), 
-            function(x) ymd(str_sub(x, 1, 10))) %>%
-  mutate_if(is.character, str_trim) %>%
-  mutate(URG_PRIRTY_IND = URG_PRIRTY_IND == 'Y',
-         PREF_FULFLMNT_CHNL_CD = PREF_FULFLMNT_CHNL_CD == 'SUBC',
-         NEED_SUB_IND = NEED_SUB_IND == 'Y',
-         STAT_RESN_DESC = ifelse(is.na(STAT_RESN_DESC), F, 
-                                 STAT_RESN_DESC == 'Staffed by contractor/other'),
-         PAY_TRVL_IND = PAY_TRVL_IND == 'Y',
-         WRK_RMT_IND = WRK_RMT_IND == 'Y',
-         Created.floor = floor_date(CRE_T, 'month'),
-         OG.Start.floor = floor_date(STRT_DT, 'month'),
-         Close.floor = floor_date(WTHDRW_CLOS_T, 'month'),
-         Close.week = floor_date(WTHDRW_CLOS_T, 'week'),
-         record.age = to.today(CRE_T),
-         Lead.time.days = lead.time(CRE_T, STRT_DT),
-         needed30.days = from.today(STRT_DT) <= 30,
-         project.duration = day.diff(STRT_DT, END_DT)) %>%
-  mutate_if(is.character, as.factor)
-
-#position requests created AFTER work started (???)
-time.vortex <- filter(data, CRE_T > STRT_DT)
-
-# 2D - DATE CLEANUP -------------------------------------------------------
-#put data for prediction into separate df and save for later
-filter30 <- function(start.date) {
-  day30 <- current.run + days(30)
-  flag <- start.date %within% interval(current.run, day30)
-  return(flag)
-}
-
-filter60 <- function(start.date) {
-  day30 <- current.run + days(31)
-  day60 <- day30 + days(30)
-  flag <- start.date %within% interval(day30, day60)
-  return(flag)
-}
-
-# 2E - CANDIDATE MAPPING --------------------------------------------------
-#set up helper function for NA values from casting
-replacer <- function(x) {
-  values <- replace(x, is.na(x), 0)
-  return(values)
-}
-
-candidate$OPNSET_ID <- as.character(candidate$OPNSET_ID)
-#get start date into candidate table
-candidate <- left_join(candidate, 
-                       data %>%
-                         select(OPNSET_ID, OG.Start.floor) %>%
-                         mutate(OPNSET_ID = as.character(OPNSET_ID)), 
-                       by = 'OPNSET_ID')
-
-#filter to grab the last available status 1 MONTH BEFORE START DATE
-candidate <- candidate %>%
-  mutate(CAND_OPNSET_STAT_T = ymd_hms(CAND_OPNSET_STAT_T),
-         start.hms = ymd_hms(paste(OG.Start.floor, '00:00:00'))) %>%
-  group_by(OPNSET_POS_CAND_ID, OPNSET_ID) %>%
-  filter(CAND_OPNSET_STAT_T < start.hms, 
-         CAND_OPNSET_STAT_T == max(CAND_OPNSET_STAT_T)) %>%
-  ungroup() %>%
-  distinct(.keep_all = T)
-
-#how many candidates per SEAT
-candidate.count <- candidate %>%
-  group_by(OPNSET_ID, OG.Start.floor) %>%
-  summarise(candidate.count = length(unique(OPNSET_POS_CAND_ID)),
-            csa.src = sum(CAND_SRC_CD == 'C')) %>%
-  mutate(csa.src = replacer(csa.src))
-
-#how many candidates per SEAT DESCRIPTION CODE
-candidate.type <- candidate %>%
-  group_by(OPNSET_ID, OG.Start.floor, CAND_STAT_NM) %>%
-  summarise(candidate.type = length(unique(OPNSET_POS_CAND_ID))) %>% 
-  group_by(OPNSET_ID, OG.Start.floor) %>% 
-  spread(CAND_STAT_NM, candidate.type) %>%
-  mutate_each(funs(replacer))
-
-candidate.count <- left_join(candidate.count, 
-                             candidate.type, 
-                             by = c('OPNSET_ID', 'OG.Start.floor')) %>%
-  mutate(active.cands = (candidate.count - Confirmed - Withdrawn - `<NA>`)/candidate.count) %>%
-  mutate_each(funs(replacer), -OPNSET_ID, - OG.Start.floor)
-
-#map back into the data
-data <- left_join(data, 
-                  candidate.count %>% 
-                    ungroup() %>%
-                    mutate(OPNSET_ID = as.double(OPNSET_ID)), 
-                  by = c('OPNSET_ID', 'OG.Start.floor'))
-candidate.vars <- setdiff(colnames(candidate.count), c('OPNSET_ID', 'OG.Start.floor'))
-
-save(data, candidate.vars, filter60, file = paste0('data in progress ', current.run,'.saved'))
-fresh.data <- T
-save(fresh.data, file = 'fresh.data.saved')
 
 # 3A - JOB ROLE FEATURES ------------------------------------------------
+message('3A - START')
 #collapse by JR to create new features
 jr.ft <- tbl_df(data) %>%
   filter(!is.na(WTHDRW_CLOS_T)) %>%
   group_by(JOB_ROL_TYP_DESC, OG.Start.floor) %>%
   summarise(jr.count = length(OPNSET_POS_ID))
 
-month.vec <- seq.Date(ymd('2000-01-01'), floor_date(current.run, 'month'), 'month')
+month.vec <- seq.Date(ymd('2000-01-01'), floor_date(lubridate::ymd(current.run), 'month'), 'month')
 
 month.expanded <- with(jr.ft, CJ(unique(as.factor(JOB_ROL_TYP_DESC)), month.vec))
 setnames(month.expanded, colnames(month.expanded), c('JOB_ROL_TYP_DESC', 'OG.Start.floor'))
@@ -415,10 +532,11 @@ setnames(month.expanded, colnames(month.expanded), c('JOB_ROL_TYP_DESC', 'OG.Sta
 month.expanded <- left_join(month.expanded, jr.ft, by = c('JOB_ROL_TYP_DESC', 'OG.Start.floor')) %>%
   group_by(JOB_ROL_TYP_DESC) %>%
   arrange(desc(OG.Start.floor)) %>%
-  mutate(jr.count = lead(jr.count, 1),
+  mutate(jr.count = lead(jr.count, 2),
          jr.count = replace(jr.count, is.na(jr.count), 0))
 
 # 3B - JRSS ACTUAL WEEKLY DEMAND TABLE ---------------------------------------------
+message('3B - START')
 #how many positions were ACTUALLY CLOSED/WITHDRAWN each month
 
 jrss.week <- tbl_df(data) %>%
@@ -429,7 +547,7 @@ jrss.week <- tbl_df(data) %>%
             sub.actual = sum(STAT_RESN_DESC)) %>%
   mutate(JRSS = paste(JOB_ROL_TYP_DESC, SKLST_TYP_DESC, sep = ' - '))
 
-week.vec <- with(jrss.week, seq.Date(min(Close.week), floor_date(current.run, 'week'), 'week'))
+week.vec <- with(jrss.week, seq.Date(min(Close.week), floor_date(lubridate::ymd(current.run), 'week'), 'week'))
 
 week.expanded <- with(jrss.week, CJ(unique(c(JRSS)), week.vec))
 setnames(week.expanded, colnames(week.expanded), c('JRSS', 'Close.week'))
@@ -471,9 +589,8 @@ week.expanded <- tbl_df(week.expanded) %>%
   group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC) %>%
   #filter(JOB_ROL_TYP_DESC == 'Application Developer', SKLST_TYP_DESC == 'COBOL') %>%
   #we need to 'lag' the data so that we only use the info we had AT THAT TIME (no peeking into future)
-  mutate(tot.lag = lag(actual.wk, n = 1),
-         sub.lag = lag(sub.actual.wk, n = 1),
-         #these will create a cumulative sum of actual demand (sliding 12 month window)
+  mutate(tot.lag = lag(actual.wk, n = 8),
+         sub.lag = lag(sub.actual.wk, n = 8),
          tot.4wk = cumul.msum(tot.lag),
          sub.4wk = cumul.msum(sub.lag),
          tot.4lag = lag(tot.4wk, n = 4),
@@ -486,6 +603,7 @@ week.expanded <- tbl_df(week.expanded) %>%
   select(-tot.lag, -sub.lag)
 
 # 3C - JRSS ACTUAL MONTHLY DEMAND TABLE  ----------------------------------------
+message('3C - START')
 #FIRST WE GET OUR MONTHLY JRSS ACTUALS
 #how many positions were ACTUALLY CLOSED/WITHDRAWN each month
 jrss.counter <- tbl_df(data) %>%
@@ -536,8 +654,8 @@ cumul.yrsum <- function(x) {
 jrss.expanded <- tbl_df(jrss.expanded) %>%
   group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC) %>%
   #we need to 'lag' the data so that we only use the info we had AT THAT TIME (no peeking into future)
-  mutate(tot.lag = lag(actual, n = 1),
-         sub.lag = lag(sub.actual, n = 1),
+  mutate(tot.lag = lag(actual, n = 2),
+         sub.lag = lag(sub.actual, n = 2),
          #we create a rolling 2 period avg based on the lagged values
          r2tot = rollapply(data = tot.lag, width = 2,FUN = mean,
                            align = 'right', fill = NA, na.rm = F),
@@ -550,6 +668,7 @@ jrss.expanded <- tbl_df(jrss.expanded) %>%
   select(-tot.lag, -sub.lag)
 
 # 3D - JRSS PROJECTED MONTHLY DEMAND TABLE --------------------------------
+message('3D - START')
 #use the 'expanded' object we made in previous section
 setnames(expanded, 'Close.floor', 'OG.Start.floor')
 
@@ -558,10 +677,10 @@ jrss.projection <- tbl_df(data) %>%
   filter(!is.na(OG.Start.floor)) %>%
   #filter(year(Close.floor) == 2015) %>% #in case we want to limit data size
   #positions created BEFORE the start of PREVIOUS MONTH (which positions w start date in March were created BEFORE/ON FEB 1st?)
-  filter(CRE_T <= OG.Start.floor %m-% months(1)) %>%
+  filter(CRE_T <= OG.Start.floor %m-% months(2)) %>%
   #which positions were still OPEN at the start of the PREVIOUS MONTH? (which positions w start date in March were still open on FEB 1st?)
   mutate(open = ifelse(is.na(WTHDRW_CLOS_T), T, 
-                       WTHDRW_CLOS_T > OG.Start.floor %m-% months(1))) %>%
+                       WTHDRW_CLOS_T > OG.Start.floor %m-% months(2))) %>%
   filter(open) %>%
   group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC, OG.Start.floor) %>%
   #now collapse by JRSS and get counts
@@ -598,7 +717,7 @@ jrss.tbl <- tbl_df(jrss.tbl) %>%
 #create top 50 JRSS feature
 top.jrss <- tbl_df(jrss.expanded) %>%
   #filter(ref.month == max(ref.month)) %>%
-  filter(ref.month == floor_date(current.run, 'month')) %>%
+  filter(ref.month == floor_date(lubridate::ymd(current.run), 'month')) %>%
   select(JOB_ROL_TYP_DESC, SKLST_TYP_DESC, tot.12cs, sub.12cs) %>%
   #group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC) %>%
   mutate(tot.rank = row_number(desc(tot.12cs)),
@@ -629,27 +748,45 @@ top.jrss <- full_join(top.jrss, jrss.tiers, by = c('JOB_ROL_TYP_DESC', 'SKLST_TY
 #map JRSS features back into POSITION DATA
 df <- data
 
-save(df, file = '30 day df pre filter.saved')
-
+save(df, file = '60 day df pre filter.saved')
+message('3D - PRE-FILTER DF')
 # 3E - TEST / TRAIN FILTER ------------------------------------------------
 #need to split df by test/train to map in the last available JRSS values to prediction set
 df <- tbl_df(df) %>%
   #exclude dates beyond the time period we're projecting
-  filter(STRT_DT <= (current.run + days(30)),
-         (WTHDRW_CLOS_T >= OG.Start.floor | is.na(WTHDRW_CLOS_T)),
-         CRE_T <= OG.Start.floor) %>%
+  filter(STRT_DT <= (lubridate::ymd(current.run) + days(60)), 
+         !STRT_DT %within% interval(lubridate::ymd(current.run), lubridate::ymd(current.run) + days(30)),
+         (WTHDRW_CLOS_T >= OG.Start.floor - months(1) | is.na(WTHDRW_CLOS_T)),
+         CRE_T <= OG.Start.floor - months(1)) %>%
   #start date may be up to 30 days in advance, but take any positions that are still open
   mutate(type = as.factor(
-    ifelse(filter30(STRT_DT) & is.na(WTHDRW_CLOS_T),
+    ifelse(filter60(STRT_DT) & is.na(WTHDRW_CLOS_T),
            'TEST',
            'TRAIN')))
 
 #create JRSS counts from testing
 upcoming.tbl <- tbl_df(df) %>%
   group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC, OG.Start.floor) %>%
-  summarise(upcoming.open = sum(WTHDRW_CLOS_T >= OG.Start.floor | is.na(WTHDRW_CLOS_T)))
+  summarise(upcoming.open = sum(WTHDRW_CLOS_T >= OG.Start.floor | is.na(WTHDRW_CLOS_T))) %>%
+  ungroup() %>%
+  mutate(JRSS = paste0(JOB_ROL_TYP_DESC, ' - ', SKLST_TYP_DESC))
 
-df <- left_join(df, upcoming.tbl, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC', 'OG.Start.floor'))
+jrss.vector <- unique(upcoming.tbl$JRSS)
+upcoming.expanded <- CJ(unique(jrss.vector), month.vec)
+setnames(upcoming.expanded, colnames(upcoming.expanded), c('JRSS', 'OG.Start.floor'))
+up.map <- unique(upcoming.tbl[c('JRSS', 'JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC')])
+upcoming.expanded <- left_join(upcoming.expanded, up.map, by = 'JRSS') %>%
+  select(-JRSS)
+
+upcoming.expanded <- left_join(upcoming.expanded, upcoming.tbl, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC', "OG.Start.floor"))
+
+upcoming.expanded <- upcoming.expanded %>%
+  mutate(upcoming.open = replace(upcoming.open, is.na(upcoming.open), 0)) %>%
+  group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC) %>%
+  mutate(upcoming.open = lag(upcoming.open, n = 1)) %>%
+  select(-JRSS)
+
+df <- left_join(df, upcoming.expanded, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC', 'OG.Start.floor'))
 
 #create pos counts from data (how many pos per seats? how many csa candidates per position?)
 post.count <- df %>%
@@ -667,13 +804,15 @@ train <- left_join(train, week.expanded, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_D
 train <- left_join(train, jrss.tbl, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC', 'OG.Start.floor' = 'ref.month'))
 train <- left_join(train, month.expanded, by = c('JOB_ROL_TYP_DESC', 'OG.Start.floor'))
 
-#skip <- T
+message('3E - SPLIT')
 if(skip) {
+  message('3E - STACKING PRIOR TABLES')
   #shift these new training positions to a temp df
   train.new <- train
+  #load('60 day last run.saved')
   #load the training set USED IN PREVIOUS RUNS (this is the running training df)
-  load(paste0('30 day train', last.run, '.saved'))
-  
+  #load(paste0('60 day train', last.run, '.saved'))
+  load(paste0('60 day train', toString(last.run), '.saved'))
   train <- train %>%
     select(-jrss.tot, -jrss.sub, -demand.tier, -top.city, -top.owner, -Month, - Year)
   
@@ -681,28 +820,27 @@ if(skip) {
   #gotta make sure the master training set is LOCKED before we start running (ie, need same features in old & current)
   train <- rbind(train, train.new)
 }
-
 #select last FULL week (don't include the current week)
 latest.week <- week.expanded %>%
-  filter(Close.week == floor_date(current.run, 'week') - weeks(1))
+  filter(Close.week == floor_date(lubridate::ymd(current.run), 'week') - weeks(1))
+
 testing <- testing %>%
-  mutate(dummy.week = floor_date(current.run, 'week') - weeks(1))
+  mutate(dummy.week = floor_date(lubridate::ymd(current.run), 'week') - weeks(1))
 testing <- left_join(testing, latest.week, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC', 'dummy.week' = 'Close.week'))
 testing <- select(testing, -dummy.week)
-
 #select last MONTH from JRSS.TBL
 latest.month <- jrss.tbl %>%
-  filter(ref.month == floor_date(current.run, 'month'))
+  filter(ref.month == floor_date(lubridate::ymd(current.run), 'month'))
 testing <- testing %>%
-  mutate(dummy.month = floor_date(current.run, 'month'))
+  mutate(dummy.month = floor_date(lubridate::ymd(current.run), 'month'))
 testing <- left_join(testing, latest.month, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC', 'dummy.month' = 'ref.month'))
 testing <- select(testing, -dummy.month)
 
 #select last MONTH from MONTH.EXPANDED
 latest.jr <- month.expanded %>%
-  filter(OG.Start.floor == floor_date(current.run, 'month'))
+  filter(OG.Start.floor == floor_date(lubridate::ymd(current.run), 'month'))
 testing <- testing %>%
-  mutate(dummy.month = floor_date(current.run, 'month'))
+  mutate(dummy.month = floor_date(lubridate::ymd(current.run), 'month'))
 testing <- left_join(testing, latest.jr, by = c('JOB_ROL_TYP_DESC', 'dummy.month' = 'OG.Start.floor'))
 testing <- select(testing, -dummy.month)
 
@@ -710,7 +848,7 @@ testing <- select(testing, -dummy.month)
 df <- rbind(train, testing)
 
 #create work city var
-past.12 <- interval(floor_date(current.run, 'month') - months(12), floor_date(current.run, 'month'))
+past.12 <- interval(floor_date(lubridate::ymd(current.run), 'month') - months(12), floor_date(lubridate::ymd(current.run), 'month'))
 city <- tbl_df(df) %>%
   filter(OG.Start.floor %within% past.12) %>%
   group_by(WRK_CTY_NM) %>%
@@ -724,7 +862,7 @@ city <- tbl_df(df) %>%
 
 #create opp owner var
 owner <- tbl_df(df) %>%
-  filter(OG.Start.floor %within% past.12, !is.na(OWNER_NOTES_ID)) %>%
+  filter(OG.Start.floor %within% past.12, OWNER_NOTES_ID != 'NONE') %>%
   group_by(OWNER_NOTES_ID) %>%
   summarise(count = length(unique(OPNSET_POS_ID))) %>%
   ungroup() %>%
@@ -733,9 +871,6 @@ owner <- tbl_df(df) %>%
   filter(rank <= 30) %>%
   arrange(rank) %>%
   select(-count, -rank)
-
-
-
 
 #map the top 50 tot / sub most common JRSS in past 12 months
 df <- left_join(df, top.jrss, by = c('JOB_ROL_TYP_DESC', 'SKLST_TYP_DESC'))
@@ -750,12 +885,14 @@ df <- merge(df, owner, by = 'OWNER_NOTES_ID', all.x = T)
 df[c('jrss.tot', 'jrss.sub', 'top.city', 'top.owner')] <- lapply(df[c('jrss.tot', 'jrss.sub', 'top.city', 'top.owner')], 
                                                                  function(x) replace(x, is.na(x), 'OTHER'))
 
-
 load('start time.saved')
-proc.time() - start
-save(df, file = paste0('30 day observation tbl ', current.run, '.saved'))
+
+start - proc.time()
+
+save(df, file = paste0('60-day observation tbl ', lubridate::ymd(current.run), '.saved'))
 
 # 4A - PREP DATA FOR RANDOM FORESTS ------------------------------------------------------
+message('4A - PREP FOR FACTOR RF')
 df$Month <- with(df, lubridate::month(STRT_DT, label = T))
 df$Year <- with(df, lubridate::year(STRT_DT))
 
@@ -791,12 +928,14 @@ df[setdiff(num.inputvars, 'STAT_RESN_DESC')] <- lapply(df[setdiff(num.inputvars,
 testing <- df[df$type == 'TEST',]
 train <- df[df$type == 'TRAIN',]
 
-save(testing, file = paste0('30 day testing', current.run, '.saved'))
-
-save(train, file = paste0('30 day train', current.run, '.saved'))
+save(testing, file = paste0('60 day testing', lubridate::ymd(current.run), '.saved'))
+save(train, file = paste0('60 day train', lubridate::ymd(current.run), '.saved'))
 #save last run date for using next refresh
+last.run <- current.run
+save(last.run, file = 'last run.saved')
 
 # 4B - TRAIN FACTOR FOREST ------------------------------------------------
+message('4B - TRAIN FACTOR RF')
 #grab position IDs and JRSS for mapping back into RF outputs
 id <- data.frame(Position.ID = train$OPNSET_POS_ID, 
                  JR = train$JOB_ROL_TYP_DESC, 
@@ -812,7 +951,6 @@ facts.input <- train[setdiff(facts, c('OPNSET_ID', 'OPNSET_POS_ID', 'JOB_ROL_TYP
 #unlist(lapply(facts.input, function(x) length(levels(x))))
 #probably could set up automatic check that drops any vars that violate this....
 facts.input$WRK_CTY_NM <- NULL
-
 facts.input$OWNG_CNTRY_CD <- NULL
 
 detach("package:dplyr", unload=TRUE)
@@ -831,10 +969,8 @@ fact.forest <- randomForest(STAT_RESN_DESC ~ .,
                             ntree = 500,
                             nodesize = 100,
                             na.action = na.omit)
-
 proc.time()-t
 print(fact.forest)
-
 varImpPlot(fact.forest)
 
 #grab probability predictions
@@ -843,10 +979,11 @@ fact.pred <- predict(fact.forest, type="prob")[, 2]
 fact.out <- data.frame(predicted = fact.forest$predicted, 
                        actual = fact.forest$y,
                        prob = fact.pred)
-
 fact.out <- cbind(id, fact.out)
 
-# 4c - TRAIN CONTINUOUS FOREST --------------------------------------------
+
+# 4B - TRAIN CONTINUOUS FOREST --------------------------------------------
+message('4B - NUMERIC RF')
 #get the numeric vars
 num.input <- train[num.inputvars]
 #include the factor forest probabilities as INPUTS to numeric forest
@@ -869,8 +1006,8 @@ print(num.forest)
 varImpPlot(num.forest)
 
 library(cowsay)
-sink(paste0('global 30 day randomForest diagnostics ', current.run, '.txt'))
-cat(say('Clark is still a butt!', by='chicken', type = 'string'), sep = '\n')
+sink(paste0('60 day randomForest diagnostics ', lubridate::ymd(current.run), '.txt'))
+cat(say('Clark is a butt!', by='chicken', type = 'string'), sep = '\n')
 print(fact.forest)
 print(num.forest)
 sink()
@@ -893,7 +1030,9 @@ importance.tbl$var <- as.factor(rownames(importance.tbl))
 rownames(importance.tbl) <- NULL
 importance.tbl$var <- factor(importance.tbl$var, levels = importance.tbl$var[order(importance.tbl$MeanDecreaseAccuracy)])
 
+
 # 5A - PREDICT ------------------------------------------------------------
+message('5A - SCORING')
 #select factor variables for PREDICTION SET
 test.facts <- testing[colnames(facts.input)]
 #get FACTOR predictions
@@ -918,12 +1057,11 @@ test.id <- data.frame(Position.ID = testing$OPNSET_POS_ID,
                       actual = testing$STAT_RESN_DESC)
 #map eval outcomes
 final.pred <- cbind(test.id, num.predictions)
-save(final.pred, file = paste0('30 day prediction output ', current.run, '.saved'))
+save(final.pred, file = paste0('60 day prediction output ', lubridate::ymd(current.run), '.saved'))
 
-#plot importance chart at the end
-
+#make pretty importance chart at the very end to avoid weird shutdown
 # CLARK ERRORS OVERALL ------------------------------------------------------------
-
+message('DUMB CLARK SECTION WE NEVER USE')
 binary.code <- function(n, probs) {
   #sample from binomial distribution N times, assuming size of 100, and base probability from random forest output
   nums <- rbinom(n, 100, probs)/100
@@ -1008,76 +1146,117 @@ if(run.this) {
     select(-JR, -SS)
   
   outcome <- left_join(outcome, model.guess, by = c('JRSS'))
+}
+
+# 60 DAY REGRESSION (UGHGHGHGHGHG) ---------------------------------------
+regress <- T
+if(regress) {
+  #this is only OVERALL (no country breakout)
   
-  outcome.plot <- ggplot(outcome, aes(x = count, color = inbound)) +
-    geom_abline(
-      slope = 1,
-      intercept = 0,
-      linetype = 'dashed',
-      color = 'gray30'
-    ) +
-    geom_errorbar(aes(ymax = high95, ymin = low5),
-                  alpha = 1 / 4,
-                  size = 1.5) +
-    geom_point(
-      aes(y = roundsum),
-      shape = 1,
-      alpha = 1 / 3,
-      size = 4,
-      stroke = 2,
-      fill = 'white'
-    ) +
-    scale_x_continuous(
-      limits = c(0, 18),
-      breaks = seq(0, 20, by = 2),
-      name = 'Actual Subk Demand',
-      expand = c(0, 0)
-    ) +
-    scale_y_continuous(
-      limits = c(0, 18),
-      breaks = seq(0, 20, by = 2),
-      name = 'Predicted Subk Range',
-      expand = c(0, 0)
-    ) +
-    scale_color_discrete(name = "Within Predicted Range") +
-    coord_flip() +
-    theme_bw() +
-    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
-    theme(
-      panel.grid.major.x = element_blank(),
-      panel.grid.major.y = element_blank(),
-      strip.text.x = element_text(size = 10.5, face = "bold"),
-      strip.text.y = element_text(size = 10.5, face = "bold"),
-      axis.title.x = element_text(face = "bold", size = 14),
-      axis.title.y = element_text(face = "bold", size = 14),
-      axis.text.x = element_text(size = 10),
-      axis.text.y = element_text(size = 10),
-      plot.title = element_text(face = "bold", size = 24),
-      legend.position = "bottom"
-    )
+  #summarise OOB training to JRSS
+  #this gets you what the model thought would happen in 60 days (FROM TRAINING DATA)
+  #need to join this with what actually happened (including other positions that were created afterwards)
+  train.eval <- num.out %>%
+    group_by(JR,
+             SS,
+             #country,
+             Start.dt) %>%
+    filter(year(Start.dt) >= 2015) %>%
+    summarise(
+      N = length(Position.ID),
+      actual = sum(as.logical(actual)),
+      roundsum = round(sum(prob), 0),
+      log.act = log(actual + 1),
+      log.round = log(roundsum + 1),
+      rt.act = sqrt(actual),
+      rt.round = sqrt(roundsum)) %>%
+    mutate(JRSS = paste0(JR, ' - ', SS))
+  train.eval$random <-
+    with(train.eval, round(sum(actual) / sum(N) * N, 0))
+  train.eval$rt.rand <- with(train.eval, sqrt(random))
   
-  ggsave(
-    plot = outcome.plot,
-    paste0("Eval - JRSS prediction bounds July", current.run, '.png'),
-    h = 200,
-    w = 200,
-    unit = "mm",
-    type = "cairo-png",
-    dpi = 300
-  )
+  #THIS GETS YOU THE ACTUAL DEMAND FOR A GIVEN MONTH
+  demanded <- tbl_df(data) %>%
+    filter(year(OG.Start.floor) >= 2015) %>%
+    #WTHDRW_CLOS_T >= OG.Start.floor) %>%
+    group_by(JOB_ROL_TYP_DESC, SKLST_TYP_DESC, OG.Start.floor) %>%
+    summarise(Total.N = length(OPNSET_POS_ID),
+              subks = sum(STAT_RESN_DESC, na.rm = T)) %>%
+    ungroup() %>%
+    mutate(JRSS =  paste0(JOB_ROL_TYP_DESC, ' - ', SKLST_TYP_DESC)) %>%
+    select(JRSS, OG.Start.floor, Total.N, subks)
   
-  outcome.plot
+  #SET UP YOUR TABLE FOR REGRESSIONS
+  lm.tbl <- left_join(train.eval, demanded, by = c('JRSS', "Start.dt" = "OG.Start.floor"))
+  lm.tbl <- lm.tbl %>%
+    ungroup() %>%
+    select(JRSS, Start.dt, roundsum, rt.round, rt.rand, subks) %>%
+    mutate(rt.subks =  sqrt(subks))
+  
+  #do stupid regressions
+  lm.eval <- with(lm.tbl, lm(rt.subks ~ rt.round))
+  summary(lm.eval)
+  
+  rand.eval <- with(lm.tbl, lm(rt.subks ~ rt.rand))
+  summary(rand.eval)
+  
+  #DUMP
+  sink(paste0('60 day regression diagnostics ', lubridate::ymd(current.run), '.txt'))
+  cat(say('THE HORROR, THE HORROR!', by = 'cat', type = 'string'), sep = '\n')
+  cat("\n")
+  cat("\n")
+  print("lm.eval:")
+  summary(lm.eval)
+  cat("\n")
+  cat("\n")
+  print("rand.eval:")
+  summary(rand.eval)
+  sink()
+  
+  #collapse RF TESTING output to JRSS predictions (LIVE DATA!)
+  final.eval <- final.pred %>%
+    group_by(JR, SS) %>%
+    summarise(
+      N = length(Position.ID),
+      actual = sum(as.logical(actual)),
+      roundsum = round(sum(prob), 0))
+  
+  #expected subk demand in TESTING
+  new <- data.frame(rt.round = sqrt(final.eval$roundsum))
+  
+  addl.demand <- as.data.frame(predict(lm.eval, new, interval = 'prediction'))
+  addl.demand <- as.data.frame(apply(addl.demand, 2, function(x) round(x^2, 0)))
+  
+  addl.demand <- cbind(as.data.frame(final.eval), addl.demand)
+  
+  addl.demand <- tbl_df(addl.demand) %>%
+    mutate(JRSS = paste0(JR, ' - ', SS),
+           flag = roundsum >= upr,
+           rand1 = runif(length(addl.demand$JR), .1, .25),
+           rand2 =runif(length(addl.demand$JR), 0, 3),
+           future.demand = ifelse(flag, 
+                                  roundsum + round(rand1 * roundsum, 0) + round(rand2,0), 
+                                  upr + round(rand2,0)),
+           Expected.Additional.Demand = future.demand - roundsum) %>%
+    select(-flag, -rand1, -rand2, -actual)
+  
+  save(addl.demand, file = 'stupid 60 day regression tbl.saved')
+  
+  addl.demand <- addl.demand %>%
+    select(JRSS, roundsum, Expected.Additional.Demand)
 }
 
 # EXCEL OUTPUT ------------------------------------------------------------
 #library(XLConnect)
-
+message('EXCEL PREP')
 #grab the vars we need for the DUMB REPORT
 library(dplyr)
 reporter <- data %>%
   filter(OPNSET_POS_ID %in% unique(testing$OPNSET_POS_ID)) %>%
-  select(OPNSET_ID, OPNSET_POS_ID, Unit, CNTRCT_OWNG_ORG_NM, JOB_ROL_TYP_DESC, SKLST_TYP_DESC, CRE_T, WRK_CTY_NM, WRK_CNTRY_CD,
-         WTHDRW_CLOS_T, INDSTR_NM, OWNER_NOTES_ID, DELG_NOTES_ID, WRK_RMT_IND, BND_LOW, BND_HIGH, STRT_DT, END_DT, project.duration, PAY_TRVL_IND, Unit) %>%
+  select(OPNSET_ID, OPNSET_POS_ID, Unit, CNTRCT_OWNG_ORG_NM, JOB_ROL_TYP_DESC, 
+         SKLST_TYP_DESC, CRE_T, WRK_CTY_NM, WRK_CNTRY_CD,
+         WTHDRW_CLOS_T, INDSTR_NM, OWNER_NOTES_ID, DELG_NOTES_ID, WRK_RMT_IND, BND_LOW, BND_HIGH, 
+         STRT_DT, END_DT, project.duration, PAY_TRVL_IND, Unit) %>%
   mutate(Open.Dummy = 'OPEN',
          Low.Band = BND_LOW, 
          High.Band = BND_HIGH, 
@@ -1094,9 +1273,10 @@ reporter <- left_join(num.predictions,
 setnames(reporter, 
          setdiff(colnames(reporter), c('Low.Band', 'High.Band', 'Opp.Industry', 'Business.Unit', 'Pay.Travel.Expenses')),
          c('Position.ID', 'Prediction', 'Probability', "Seat.ID", 'Unit', 'Sub.LOB','Job.Role', 
-           'Skillset', 'Create.Date', 'Work.City', 'Work.Country', 'Close.Date', 'Industry', 'Opp.Owner.ID', 'Delegate.Notes.ID',
+           'Skillset', 'Create.Date', 'Work.City', 'Work.Country', 'Close.Date', 'Industry', 'Opp.Owner.ID', 'Delegate.Notes.ID', 
            'Work.Remotely', 'Band-low', 'Band-high', 'Start.Date', 'End.Date', 'Engagement.Duration', 'Pay.Travel', 'Status'))
 
+##clark edit: multiply percentage by 100
 reporter$Probability.percentage <- with(reporter, paste0(round(Probability, 2)*100, '%'))
 reporter$Subk.prob.flag <- with(reporter, ifelse(Probability >= .6, 'High Subk Likelihood',
                                                  ifelse(Probability < .6 & Probability > .3, 'Medium Subk Likelihood',
@@ -1114,6 +1294,17 @@ reporter <- left_join(reporter,
                       by = c('JRSS', 'Work.Country' = 'country'))
 setnames(reporter, c('Q1','Q3'), c('Low.Estimate.(Country)', 'High.Estimate.(Country)'))
 
+#regression
+if(regress) {
+  reporter <- left_join(reporter, addl.demand, by = 'JRSS')
+  setnames(reporter, 'roundsum', 'Expected.JRSS.Demand')
+} else {
+  message('skipping 60 day regression')
+  #in case stupid regression gets switched off, dump dummy values into fields
+  reporter$Expected.JRSS.Demand <- '--'
+  reporter$Expected.Additional.Demand <- '--'
+}
+
 names(reporter) <- gsub(x = names(reporter),
                         pattern = "\\.",
                         replacement = " ")
@@ -1126,22 +1317,16 @@ rep.arch <- 'C:/Users/SCIP2/Documents/Demand Forecasting III/Output Reports'
 cartographer <- as.character(sort(unique(df$WRK_CNTRY_CD)))
 message(c('REPORTING ON THE FOLLOWING COUNTRIES:\n', paste0(cartographer, sep = '   ')))
 
-reports <- paste0(rep.arch, '/', cartographer, '/', 
-                  c(rep('30_day_', length(cartographer)), 
-                    rep('60_day_', length(cartographer))), 
-                  cartographer, '_', 
-                  current.run, '.xlsx')
-
-sink('filenames.txt')
-cat(sort(reports), sep = '\n')
-sink()
-
 setwd("~/Demand Forecasting III/Archive")
-save.image("30 day ws.RData")
+
+save.image("60 day ws.RData")
+fresh.data <- F
+save(fresh.data, file = 'fresh.data.saved')
 
 #TEMPORARY WD, CHANGE ONCE LOCATION IS STABLE
 main.Dir <- "~/Demand Forecasting III/Output Reports"
 
+message('GLOBAL LOOP')
 #loop over all countries to dump csv data
 for(i in 1:length(cartographer)) {
   #verify folder exists for country
@@ -1157,25 +1342,29 @@ for(i in 1:length(cartographer)) {
     filter(`Work Country` == cartographer[i])
   
   #open the 30 day template and paste REPORTER into DATA sheet
-  wb <- openxlsx::loadWorkbook(file = 'C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/30 Day Subk Demand Forecast Report BLANK TEMPLATE.xlsx')
+  wb <- openxlsx::loadWorkbook(file = 'C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/60 Day Subk Demand Forecast Report BLANK TEMPLATE.xlsx')
   openxlsx::writeData(wb, "Data", 
                       rep.dump, 
                       startCol = 1, startRow = 1, rowNames = F)
   #move to country-specific folders & delete previous run
   #*********NOT SURE IF THIS IS THE RIGHT FOLDER
   setwd(ctry.dir)
-  unlink(dir(path = getwd(), pattern =  '30_day_'))
+  unlink(dir(path = getwd(), pattern =  '60_day_'))
   #save country report
   openxlsx::saveWorkbook(wb = wb, 
-                        file = paste0('30_day_', cartographer[i],'_', current.run, '.xlsx'))
+                         file = paste0('60_day_', cartographer[i],'_', current.run, '.xlsx'))
   
   message(paste0('Dumped ', cartographer[i],'!!!'))
 }
 rm(rep.dump)
 
+message('VBS LOOP SCRIPT')
+shell.exec("C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/looper2.vbs") 
+
 setwd("~/Demand Forecasting III/Archive")
 
-#make pretty importance chart
+# Variable importance plot ------------------------------------------------
+
 library(ggplot2)
 
 importance.plot <- ggplot(importance.tbl, aes(x = var, y = MeanDecreaseAccuracy, color = type))+
@@ -1195,12 +1384,14 @@ importance.plot <- ggplot(importance.tbl, aes(x = var, y = MeanDecreaseAccuracy,
         plot.title=element_text(face="bold",size=24))
 
 ggsave(plot= importance.plot,
-       paste0("30 day Random Forest feature importance", current.run, '.png'),
+       paste0("60 day Random Forest feature importance", lubridate::ymd(current.run), '.png'),
        h=250,
        w=200,
        unit="mm",
        type="cairo-png",
        dpi=300)
 
+#end of main script
 
-message('30 DAY COMPLETED')
+
+message('THE END...?')
