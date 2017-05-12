@@ -1365,6 +1365,7 @@ message('BOX UPLOAD')
 library(boxr, lib.loc = "C:/Program Files/R/Libraries")
 box_auth()
 b <- box_push(local_dir = main.Dir, overwrite = TRUE)
+summary(b)
 
 setwd("~/Demand Forecasting III/Archive")
 
