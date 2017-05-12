@@ -1361,6 +1361,11 @@ rm(rep.dump)
 message('VBS LOOP SCRIPT')
 shell.exec("C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/looper2.vbs") 
 
+message('BOX UPLOAD')
+library(boxr, lib.loc = "C:/Program Files/R/Libraries")
+box_auth()
+b <- box_push(local_dir = main.Dir, overwrite = TRUE)
+
 setwd("~/Demand Forecasting III/Archive")
 
 # Variable importance plot ------------------------------------------------
