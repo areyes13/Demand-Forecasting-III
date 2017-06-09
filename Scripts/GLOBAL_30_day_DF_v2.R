@@ -1,7 +1,8 @@
 # 1A - LOAD PACKAGES -----------------------------------------------------------
-#con <- file("30_day_DF.log")
-#sink(con, append=TRUE)
-#sink(con, append=TRUE, type="message")
+setwd("C:/Users/SCIP2/Box Sync/Demand Forecasting (areyesm@us.ibm.com)/Archive")
+con <- file("30_day_DF.log")
+sink(con, append=TRUE)
+sink(con, append=TRUE, type="message")
 
 #set Java heap size to max
 options(java.parameters = "-Xmx24g")
@@ -9,7 +10,9 @@ Sys.setenv(JAVA_HOME='C:\\Program Files\\Java\\jdk1.8.0_102')
 Sys.setenv("R_ZIPCMD" = "C:/Rtools/bin/zip.exe")
 
 #set working directory (all output / input files are stored here)
-setwd("~/Demand Forecasting III/Archive")
+setwd("C:/Users/SCIP2/Box Sync/Demand Forecasting (areyesm@us.ibm.com)/Archive")
+#directory for templates / error messages
+temple.Dir <- 'C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/'
 
 #load packages
 library(randomForest, lib.loc = "C:/Program Files/R/Libraries")
@@ -40,13 +43,230 @@ jcc = JDBC("com.ibm.db2.jcc.DB2Driver",
 
 load('credentials.saved')
 
-conn = dbConnect(jcc,
-                 as.character(credentials[3]),
-                 user=as.character(credentials[1]),
-                 password=as.character(credentials[2]))
+conn <- tryCatch(dbConnect(jcc,
+                           as.character(credentials[3]),
+                           user=as.character(credentials[1]),
+                           password=as.character(credentials[2])),
+                 error = function(e) {
+                   sink(paste0(temple.Dir,'invalid_connection_body','.txt'))
+                   cat('Let the ruling classes tremble at a Communistic revolution.\nThe proletarians have nothing to lose but their chains.\nThey have a world to win.\nWorkingmen of all countries unite!', sep = '\n')
+                   cat(paste('\n','\n',Sys.time(),': PROM user ID or password invalid\nScript terminated'), sep = '\n')
+                   sink()
+                   
+                   message('Sending PRoM Invalid Login Warning!')
+                   mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                    to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                    subject = "Demand Forecasting: Invalid Credentials Error ",
+                                    body = paste0(temple.Dir, 'invalid_connection_body.txt'),
+                                    html = F,
+                                    smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                                user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                    authenticate = TRUE,
+                                    send = TRUE)
+                   message('Terminating script...')
+                   quit(save = 'no')
+                 })
 rm(credentials)
 
+#GR DETAIL TABLE
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.GR_OPNSET_DTL_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.GR_OPNSET_DTL_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+GR_OPNSET_DTL_T <- fetch(rs, -1)
+save(GR_OPNSET_DTL_T, file = paste0('GR_OPNSET_DTL_T_', '.saved'))
+
+#GR POSITIONS TABLE
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.GR_OPNSET_POS_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.GR_OPNSET_POS_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+GR_OPNSET_POS_T <- fetch(rs, -1)
+
+#FULFILLMENT SOURCE MAPPING TABLE
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.FULFLMNT_SRC_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.FULFLMNT_SRC_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+FULFLMNT_SRC_T <- fetch(rs, -1)
+
+#GR Delivery Center
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.GBL_DEL_CTR_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.GBL_DEL_CTR_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+GBL_DEL_CTR_T <- fetch(rs, -1)
+
+#GR Project table - this gets you project name
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.GR_PROJ_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.GR_PROJ_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+GR_PROJ_T <- fetch(rs, -1)
+
+#GR Client table - this gets you client name
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.GRDS_CLNT_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.GRDS_CLNT_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+GRDS_CLNT_T <- fetch(rs, -1)
+
+GR <- tryCatch(GR_OPNSET_POS_T %>%
+                 full_join(GR_OPNSET_DTL_T) %>%
+                 left_join(FULFLMNT_SRC_T %>%
+                             select(FULFLMNT_SRC_ID, FULFLMNT_SRC_DESC)) %>%
+                 left_join(GBL_DEL_CTR_T %>%
+                             select(GBL_DEL_CTR_ID, GBL_DEL_CTR_NM)) %>%
+                 left_join(GR_PROJ_T %>%
+                             select(GR_PROJ_ID, PROJ_NM, GRDS_CLNT_CD)) %>%
+                 left_join(GRDS_CLNT_T %>%
+                             select(GRDS_CLNT_CD, CLNT_NM)) %>%
+                 select(-FULFLMNT_SRC_ID, -GBL_DEL_CTR_ID, -GRDS_CLNT_CD, -GR_PROJ_ID),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_GR_body','.txt'))
+                 msg <- paste0(Sys.time(),': GR tables unable to merge"')
+                 cat(cowsay::say(msg, "cat", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid GR Merge Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: GR table merge error",
+                                  body = paste0(temple.Dir, 'invalid_GR_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
+
 #OPEN SEAT TABLE
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.OPNSET_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_T")
 OPNSET_T <- fetch(rs, -1)
 
@@ -56,30 +276,110 @@ load("~/Demand Forecasting III/Templates/ctry.saved")
 #couldn't get SQL filters to work in original DB2 query without blowing it up ;__;
 OPNSET_T <- tbl_df(OPNSET_T) %>%
   left_join(ctry, by = c('WRK_CNTRY_CD' = 'CTRY')) %>%
-  filter(SET_TYP_CD == 'MP', 
-         RDC_CTRY_NAME %in% c('United States', 'Canada',
-                              'China', 'Mexico', 'Brazil', 'United Kingdom', 'Spain', 
-                              'France', 'India', 'Japan', 'Australia', #'Germany',
-                              'Netherlands', 'Sweden', 'Singapore', 
-                              'Korea, Republic of', 'South Africa', 'Italy')) %>%
+  filter(#SET_TYP_CD == 'MP', 
+    RDC_CTRY_NAME %in% c('United States', 'Canada',
+                         'China', 'Mexico', 'Brazil', 'United Kingdom', 'Spain', 
+                         'France', 'India', 'Japan', 'Australia', #'Germany',
+                         'Netherlands', 'Sweden', 'Singapore', 
+                         'Korea, Republic of', 'South Africa', 'Italy')) %>%
   select(-RDC_CTRY_NAME, -URN_RDC_CTRY)
 
 #OPEN POSITION TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.OPNSET_POS_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 OPNSET_POS_T <- fetch(rs, -1)
 
 save(OPNSET_POS_T, file = paste0('OPNSET_POS_T_', '.saved'))
 
 #OPEN DETAIL TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_DTL_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_DTL_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.OPNSET_DTL_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 OPNSET_DTL_T <- fetch(rs, -1)
 
 #STATUS CODE REF TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.POS_STAT_RESN_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.POS_STAT_RESN_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.POS_STAT_RESN_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 POS_STAT_RESN_T <- fetch(rs, -1)
 
 #CONTRACT ORG REF TABLE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRCT_OWNG_ORG_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRCT_OWNG_ORG_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.CNTRCT_OWNG_ORG_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 CNTRCT_OWNG_ORG_T <- fetch(rs, -1)
 
 CNTRCT_OWNG_ORG_T <- CNTRCT_OWNG_ORG_T %>%
@@ -89,41 +389,221 @@ CNTRCT_OWNG_ORG_T <- CNTRCT_OWNG_ORG_T %>%
          Unit = as.factor(Unit))
 
 #CONTRACT TYPE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRCT_TYP_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRCT_TYP_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.CNTRCT_TYP_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 CNTRCT_TYP_T <- fetch(rs, -1)
 
 #CONTRACT TYPE
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.INDSTR_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.INDSTR_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.INDSTR_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 INDSTR_T <- fetch(rs, -1)
 INDSTR_T$DEL_FLG <- NULL
 
 #COUNTRY SECUTIRY CLEARANCE CODE REF
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRY_SEC_CLRNCE_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.CNTRY_SEC_CLRNCE_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.CNTRY_SEC_CLRNCE_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 CNTRY_SEC_CLRNCE_T <- fetch(rs, -1)
 
 #COUNTRY SECUTIRY CLEARANCE CODE REF
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.SEC_CLRNCE_TYP_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.SEC_CLRNCE_TYP_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.SEC_CLRNCE_TYP_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 SEC_CLRNCE_TYP_T <- fetch(rs, -1)
 
 #OPNSET_POS_CAND_T
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_CAND_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_CAND_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.OPNSET_POS_CAND_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 OPNSET_POS_CAND_T <- fetch(rs, -1)
 
 #OPNSET_POS_CAND_STAT
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_CAND_STAT_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.OPNSET_POS_CAND_STAT_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.OPNSET_POS_CAND_STAT_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 OPNSET_POS_CAND_STAT_T <- fetch(rs, -1)
 
 #CAND_STAT_NM
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CAND_STAT_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.CAND_STAT_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.CAND_STAT_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 CAND_STAT_T <- fetch(rs, -1)
 
 #CAND_T
-rs <- dbSendQuery(conn,"SELECT * FROM BCSPMP.CAND_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM BCSPMP.CAND_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM BCSPMP.CAND_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 CAND_T <- fetch(rs, -1)
 setnames(CAND_T, 'CNTRY_CD', 'cand.ctry')
 
 #APP USR TBL
-rs <- dbSendQuery(conn,"SELECT * FROM ACLADMIN.APP_USR_T")
+rs <- tryCatch(dbSendQuery(conn,"SELECT * FROM ACLADMIN.APP_USR_T"),
+               error = function(e) {
+                 sink(paste0(temple.Dir,'invalid_query_body','.txt'))
+                 msg <- paste0(Sys.time(),': Unable to retrieve\n"SELECT * FROM ACLADMIN.APP_USR_T"')
+                 cat(cowsay::say(msg, "chicken", type = 'string'), sep = '\n')
+                 cat('Terminating script...')
+                 sink()
+                 
+                 message('Sending Invalid Query Error!')
+                 mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                  to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                  subject = "Demand Forecasting: Invalid Query Error ",
+                                  body = paste0(temple.Dir, 'invalid_query_body.txt'),
+                                  html = F,
+                                  smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                              user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                  authenticate = TRUE,
+                                  send = TRUE)
+                 message('Terminating script...')
+                 quit(save = 'no')
+               })
 APP_USR_T <- fetch(rs, -1)
 
 #MERGES
@@ -143,29 +623,75 @@ security <-  CNTRY_SEC_CLRNCE_T %>%
   left_join(SEC_CLRNCE_TYP_T, by = "SEC_CLRNCE_TYP_ID") %>%
   select(CNTRY_SEC_CLRNCE_ID, SEC_CLRNCE_TYP_DESC)
 
-master <- OPNSET_T %>%
+#split MP and GR
+tables <- OPNSET_T %>%
   left_join(OPNSET_POS_T, 
             by = 'OPNSET_ID') %>%
   left_join(OPNSET_DTL_T, 
-            by = "OPNSET_ID") %>%
-  left_join(POS_STAT_RESN_T %>%
-              select(STAT_RESN_CD, STAT_RESN_DESC),
-            by = 'STAT_RESN_CD') %>%
-  left_join(CNTRCT_OWNG_ORG_T %>%
-              select(CNTRCT_OWNG_ORG_ID, CNTRCT_OWNG_ORG_NM, Unit),
-            by = 'CNTRCT_OWNG_ORG_ID') %>%
-  left_join(CNTRCT_TYP_T %>%
-              select(CNTRCT_TYP_ID, CNTRCT_TYP_DESC), 
-            by = 'CNTRCT_TYP_ID') %>%
-  left_join(INDSTR_T,
-            by = 'INDSTR_ID') %>%
-  left_join(security, 
-            by = "CNTRY_SEC_CLRNCE_ID") %>%
-  mutate(STAT_RESN_DESC.og = STAT_RESN_DESC,
-         STAT_RESN_DESC = replace(STAT_RESN_DESC, 
-                                  STAT_RESN_CD %in% c('WB', 'WE', 'WG') & 
-                                    PREF_FULFLMNT_CHNL_CD == 'SUBC',
-                                  'Staffed by contractor/other'))
+            by = "OPNSET_ID")
+
+mp <- tables %>%
+  filter(SET_TYP_CD == 'MP')
+
+gdev <- tables %>% 
+  filter(SET_TYP_CD == 'GR',
+         WRK_CNTRY_CD %in% c('CN', 'IN'))
+
+#drop duplicate columns
+nm <- colnames(gdev)[!colnames(gdev) %in% colnames(GR)]
+
+#bring in GR fields to seats from main query
+gdev <- gdev %>%
+  group_by(OPNSET_ID) %>%
+  select_(.dots = nm) %>%
+  left_join(GR, by = 'OPNSET_ID') %>%
+  ungroup() %>%
+  select(-FULFLMNT_ORG_CD) %>%
+  rename(FULFLMNT_ORG_CD = DEL_ORG_CD)
+
+rm(nm)
+
+
+master <- tryCatch(mp %>%
+                     bind_rows(gdev) %>%
+                     left_join(POS_STAT_RESN_T %>%
+                                 select(STAT_RESN_CD, STAT_RESN_DESC),
+                               by = 'STAT_RESN_CD') %>%
+                     left_join(CNTRCT_OWNG_ORG_T %>%
+                                 select(CNTRCT_OWNG_ORG_ID, CNTRCT_OWNG_ORG_NM, Unit),
+                               by = 'CNTRCT_OWNG_ORG_ID') %>%
+                     left_join(CNTRCT_TYP_T %>%
+                                 select(CNTRCT_TYP_ID, CNTRCT_TYP_DESC), 
+                               by = 'CNTRCT_TYP_ID') %>%
+                     left_join(INDSTR_T,
+                               by = 'INDSTR_ID') %>%
+                     left_join(security, 
+                               by = "CNTRY_SEC_CLRNCE_ID") %>%
+                     mutate(STAT_RESN_DESC.og = STAT_RESN_DESC,
+                            STAT_RESN_DESC = replace(STAT_RESN_DESC, 
+                                                     STAT_RESN_CD %in% c('WB', 'WE', 'WG') & 
+                                                       PREF_FULFLMNT_CHNL_CD == 'SUBC',
+                                                     'Staffed by contractor/other')),
+                   error = function(e) {
+                     sink(paste0(temple.Dir,'invalid_master_body','.txt'))
+                     msg <- paste0(Sys.time(),': Unable to create master table"')
+                     cat(cowsay::say(msg, "cat", type = 'string'), sep = '\n')
+                     cat('Terminating script...')
+                     sink()
+                     
+                     message('Sending Broken Master Error!')
+                     mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                      to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+                                      subject = "Demand Forecasting: Unable to generate master table error",
+                                      body = paste0(temple.Dir, 'invalid_mastery_body.txt'),
+                                      html = F,
+                                      smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                                  user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                      authenticate = TRUE,
+                                      send = TRUE)
+                     message('Terminating script...')
+                     quit(save = 'no')
+                   })
 
 #map candidate features
 candidate.type <- OPNSET_POS_CAND_STAT_T %>%
@@ -179,7 +705,7 @@ candidate <- tbl_df(OPNSET_POS_CAND_T) %>%
               select(CAND_ID, cand.ctry, CAND_SRC_CD), 
             by = 'CAND_ID')
 
-save(master, file = paste0('master ', current.run,'.saved'))
+save(master, file = paste0('master ', '.saved'))
 
 # 2B - DATA REFRESH ----------------------------------------------------
 #skip if first run-through
@@ -217,7 +743,24 @@ if(skip) {
   #LOAD LAST TRAINING:
   load(paste0('30 day train', last.run, '.saved'))
   #stack last run's testing set
-  train <- rbind(train, actualizer)
+  train <- tryCatch(rbind(train, actualizer), 
+                    error = function(e) {
+                      sink(paste0(temple.Dir,'invalid_update_body','.txt'))
+                      msg <- paste0(Sys.time(),': unable to update training set')
+                      cat(cowsay::say(msg, "cat", type = 'string'), sep = '\n')
+                      cat('Terminating script...')
+                      sink()
+                      
+                      mailR::send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+                                       to = list('areyesm@us.ibm.com'),
+                                       subject = "Demand Forecasting: Training Set Update error",
+                                       body = paste0(temple.Dir, 'invalid_update_body.txt'),
+                                       html = F,
+                                       smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                                                   user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+                                       authenticate = TRUE,
+                                       send = TRUE)
+                    })
   save(train, file = paste0('30 day train', current.run, '.saved'))
   
   #select POSITIONS STILL OPEN FROM LAST UPDATE
@@ -238,20 +781,25 @@ if(skip) {
   
   #this is the new data that needs to flow thru the next sections to generate features
   #we will need to split into testing/training AFTER all features are built and then stack where needed
-  save(tbls, file = paste0('30 day new positions raw', current.run, ',saved'))
+  save(tbls, file = paste0('30 day new positions raw', ',saved'))
   master <- tbls
 }
 # 2C - DATA PREP ----------------------------------------------------------
 start <- proc.time()
 save(start, file = 'start time.saved')
 rm(start)
+
+#GR variables to keep
+gr.var <- c('GR_OPNSET_POS_ID', 'ONSIT_STRT_DT', 'ONSIT_END_DT', 'NEED_CLNT_STE_IND', 'ACPT_SUB_IND','GBL_DEL_CTR_NM')
+
 #select which variables to keep
 vars <- c("OPNSET_ID", "OPNSET_POS_ID", "STAT_RESN_DESC", "INDSTR_NM", "STRT_DT", "END_DT", "CRE_T", 
           "LST_UPDT_T", 'OPN_T', "WTHDRW_CLOS_T", "CNTRCT_OWNG_ORG_NM",  "Unit",
           "BND_LOW", "BND_HIGH", "PAY_TRVL_IND", "WRK_RMT_IND", "CNTRCT_TYP_DESC", 
-          "FULFILL_RISK_ID", "SEC_CLRNCE_TYP_DESC", "OWNG_CNTRY_CD", "OWNER_NOTES_ID", "DELG_NOTES_ID", "WRK_CNTRY_CD", 
-          "JOB_ROL_TYP_DESC", "SKLST_TYP_DESC", "SET_TYP_CD", "WRK_CTY_NM", "URG_PRIRTY_IND", 
-          "PREF_FULFLMNT_CHNL_CD", "NEED_SUB_IND")
+          "FULFILL_RISK_ID", "SEC_CLRNCE_TYP_DESC", "OWNG_CNTRY_CD", "OWNER_NOTES_ID", "DELG_NOTES_ID", 
+          "WRK_CNTRY_CD", "JOB_ROL_TYP_DESC", "SKLST_TYP_DESC", 
+          "SET_TYP_CD", "WRK_CTY_NM", "URG_PRIRTY_IND", 
+          "PREF_FULFLMNT_CHNL_CD", "NEED_SUB_IND", gr.var)
 
 #drop variables
 data <- master %>%
@@ -304,6 +852,8 @@ day.diff <- function(start, end) {
 #recode relevant variables to binary
 #STAT_RESN_DESC: contractor position = TRUE; this is target
 data <- data %>%
+  mutate_at(vars(ONSIT_STRT_DT, ONSIT_END_DT),
+            ymd) %>%
   mutate_at(vars(STRT_DT, END_DT, CRE_T, LST_UPDT_T, OPN_T, WTHDRW_CLOS_T), 
             function(x) ymd(str_sub(x, 1, 10))) %>%
   mutate_if(is.character, str_trim) %>%
@@ -674,12 +1224,9 @@ if(skip) {
   #load the training set USED IN PREVIOUS RUNS (this is the running training df)
   load(paste0('30 day train', last.run, '.saved'))
   
-  train <- train %>%
-    select(-jrss.tot, -jrss.sub, -demand.tier, -top.city, -top.owner, -Month, - Year)
-  
   #stack the new positions with features into master training set
   #gotta make sure the master training set is LOCKED before we start running (ie, need same features in old & current)
-  train <- rbind(train, train.new)
+  train <- bind_rows(train, train.new)
 }
 
 #select last FULL week (don't include the current week)
@@ -707,7 +1254,8 @@ testing <- left_join(testing, latest.jr, by = c('JOB_ROL_TYP_DESC', 'dummy.month
 testing <- select(testing, -dummy.month)
 
 #restack for data type processing (we'll split them later)
-df <- rbind(train, testing)
+df <- train %>%
+  bind_rows(testing)
 
 #create work city var
 past.12 <- interval(floor_date(current.run, 'month') - months(12), floor_date(current.run, 'month'))
@@ -734,6 +1282,18 @@ owner <- tbl_df(df) %>%
   arrange(rank) %>%
   select(-count, -rank)
 
+#create GR delivery center var
+gdc <- tbl_df(df) %>%
+  filter(OG.Start.floor %within% past.12, !is.na(GBL_DEL_CTR_NM)) %>%
+  group_by(GBL_DEL_CTR_NM) %>%
+  summarise(count = length(unique(OPNSET_POS_ID))) %>%
+  ungroup() %>%
+  mutate(rank = row_number(desc(count)),
+         top.gdc = TRUE) %>%
+  filter(rank <= 30) %>%
+  arrange(rank) %>%
+  select(-count, -rank)
+
 
 
 
@@ -745,6 +1305,9 @@ df <- merge(df, city, by = 'WRK_CTY_NM', all.x = T)
 
 #map in top 30 cities with most requests from past 12 months
 df <- merge(df, owner, by = 'OWNER_NOTES_ID', all.x = T)
+
+#map in the top 30 GDC names
+df <- merge(df, gdc, by = 'GBL_DEL_CTR_NM', all.x = T)
 
 #replace NAs with 'OTHER'
 df[c('jrss.tot', 'jrss.sub', 'top.city', 'top.owner')] <- lapply(df[c('jrss.tot', 'jrss.sub', 'top.city', 'top.owner')], 
@@ -758,12 +1321,17 @@ save(df, file = paste0('30 day observation tbl ', current.run, '.saved'))
 # 4A - PREP DATA FOR RANDOM FORESTS ------------------------------------------------------
 df$Month <- with(df, lubridate::month(STRT_DT, label = T))
 df$Year <- with(df, lubridate::year(STRT_DT))
+df$GR.strt.mo <- with(df, lubridate::month(ONSIT_STRT_DT), label = T)
+df$GR.srtr.yr <- with(df, lubridate::year(ONSIT_END_DT), label = T)
+df$GR.duration <- with(df, as.numeric(ONSIT_END_DT - ONSIT_STRT_DT))
+df$GR.duration <- ifelse(df$GR.duration < 1, NA, df$GR.duration)
 
 facts <- c("OPNSET_POS_ID", "STAT_RESN_DESC", "INDSTR_NM", "CNTRCT_OWNG_ORG_NM", "OWNER_NOTES_ID", "DELG_NOTES_ID", "Unit",
            "PAY_TRVL_IND", "WRK_RMT_IND", "CNTRCT_TYP_DESC", "FULFILL_RISK_ID", "BND_LOW", "BND_HIGH", 'Month', 'Year',
            "SEC_CLRNCE_TYP_DESC", "OWNG_CNTRY_CD", "WRK_CNTRY_CD", "JOB_ROL_TYP_DESC", "SKLST_TYP_DESC", 
            "SET_TYP_CD", "WRK_CTY_NM", 'URG_PRIRTY_IND', 'PREF_FULFLMNT_CHNL_CD', 'NEED_SUB_IND', "needed30.days",
-           'jrss.tot', 'jrss.sub', 'top.city', 'top.owner', 'demand.tier')
+           'jrss.tot', 'jrss.sub', 'top.city', 'top.owner', 'demand.tier', 
+           'top.gdc', 'NEED_CLNT_STE_IND', 'ACPT_SUB_IND')
 
 #set any missing factor values to 'NONE' so we can run them thru RFs
 df[facts] <- lapply(df[facts], function(x) {
@@ -778,7 +1346,9 @@ num.inputvars <- c('STAT_RESN_DESC', "Lead.time.days", "record.age","r2tot", "r2
                    "r3prj", "prj.12cs", "m.tot.dmd", "m.tot.act", "m.sub.act", "tot.heat12", 
                    "tot.heat2", "project.duration", "jr.count", "actual.wk", "sub.actual.wk",
                    "tot.4wk", "sub.4wk", "tot.4lag", "sub.4lag", "tot.delta", "sub.delta", 'upcoming.open',
-                   candidate.vars, 'post.count', 'csa.posts')
+                   candidate.vars, 'post.count', 'csa.posts',
+                   'GR.strt.mo', 'GR.srtr.yr', 'GR.duration')
+num.inputvars <- num.inputvars[!num.inputvars %in% c("<NA>", 'Not Selected')]
 
 #recode NA as -100 (so we don't throw out any records just bc of NAs)
 df[setdiff(num.inputvars, 'STAT_RESN_DESC')] <- lapply(df[setdiff(num.inputvars, 'STAT_RESN_DESC')], function(x) {
@@ -798,7 +1368,8 @@ save(train, file = paste0('30 day train', current.run, '.saved'))
 
 # 4B - TRAIN FACTOR FOREST ------------------------------------------------
 #grab position IDs and JRSS for mapping back into RF outputs
-id <- data.frame(Position.ID = train$OPNSET_POS_ID, 
+id <- data.frame(Position.ID = train$OPNSET_POS_ID,
+                 GR.Position.ID = train$GR_OPNSET_POS_ID,
                  JR = train$JOB_ROL_TYP_DESC, 
                  SS = train$SKLST_TYP_DESC, 
                  country = train$WRK_CNTRY_CD,
@@ -848,10 +1419,12 @@ fact.out <- cbind(id, fact.out)
 
 # 4c - TRAIN CONTINUOUS FOREST --------------------------------------------
 #get the numeric vars
-num.input <- train[num.inputvars]
+library(dplyr)
+num.input <- train[num.inputvars] %>%
+  mutate(fact.out = fact.out$prob)
+detach("package:dplyr", unload=TRUE)
 #include the factor forest probabilities as INPUTS to numeric forest
-num.input$fact.out <- fact.out$prob
-num.input$`<NA>` <- NULL
+
 
 #run that shizznit
 t <- proc.time()
@@ -868,8 +1441,10 @@ proc.time()-t
 print(num.forest)
 varImpPlot(num.forest)
 
+
 library(cowsay)
-sink(paste0('global 30 day randomForest diagnostics ', current.run, '.txt'))
+sink(paste0('global 30 day randomForest diagnostics ', '.txt'))
+print(current.run)
 cat(say('Clark is still a butt!', by='chicken', type = 'string'), sep = '\n')
 print(fact.forest)
 print(num.forest)
@@ -898,6 +1473,7 @@ importance.tbl$var <- factor(importance.tbl$var, levels = importance.tbl$var[ord
 test.facts <- testing[colnames(facts.input)]
 #get FACTOR predictions
 factor.predictions <- data.frame(pos.id = testing$OPNSET_POS_ID,
+                                 GR.Position.ID = testing$GR_OPNSET_POS_ID,
                                  pred = predict(fact.forest, newdata = test.facts, type = 'response'),
                                  prob = predict(fact.forest, newdata = test.facts, type = 'prob')[,2])
 
@@ -907,10 +1483,12 @@ test.num <- testing[num.inputvars]
 test.num$fact.out <- factor.predictions$prob
 #get NUMERIC predictions
 num.predictions <- data.frame(pos.id = testing$OPNSET_POS_ID,
+                              GR.Position.ID = testing$GR_OPNSET_POS_ID,
                               pred = predict(num.forest, newdata = test.num, type = 'response'),
                               prob = predict(num.forest, newdata = test.num, type = 'prob')[,2])
 
 test.id <- data.frame(Position.ID = testing$OPNSET_POS_ID, 
+                      GR.Position.ID = testing$GR_OPNSET_POS_ID,
                       JR = testing$JOB_ROL_TYP_DESC, 
                       SS = testing$SKLST_TYP_DESC, 
                       city = testing$WRK_CTY_NM, 
@@ -1074,10 +1652,22 @@ if(run.this) {
 
 #grab the vars we need for the DUMB REPORT
 library(dplyr)
+
 reporter <- data %>%
-  filter(OPNSET_POS_ID %in% unique(testing$OPNSET_POS_ID)) %>%
-  select(OPNSET_ID, OPNSET_POS_ID, Unit, CNTRCT_OWNG_ORG_NM, JOB_ROL_TYP_DESC, SKLST_TYP_DESC, CRE_T, WRK_CTY_NM, WRK_CNTRY_CD,
-         WTHDRW_CLOS_T, INDSTR_NM, OWNER_NOTES_ID, DELG_NOTES_ID, WRK_RMT_IND, BND_LOW, BND_HIGH, STRT_DT, END_DT, project.duration, PAY_TRVL_IND, Unit) %>%
+  mutate_at(vars(OPNSET_POS_ID, GR_OPNSET_POS_ID,
+                 ONSIT_STRT_DT, STRT_DT,
+                 ONSIT_END_DT, END_DT), 
+            as.character) %>%
+  filter(OPNSET_POS_ID %in% as.character(na.omit(unique(testing$OPNSET_POS_ID))) | 
+           GR_OPNSET_POS_ID %in% as.character(unique(na.omit(testing$GR_OPNSET_POS_ID)))) %>%
+  mutate(OPNSET_POS_ID = ifelse(is.na(OPNSET_POS_ID), GR_OPNSET_POS_ID, OPNSET_POS_ID),
+         STRT_DT = ifelse(SET_TYP_CD == 'GR', ONSIT_STRT_DT, STRT_DT),
+         END_DT = ifelse(SET_TYP_CD == 'GR', ONSIT_END_DT, END_DT)) %>%
+  select(OPNSET_ID, OPNSET_POS_ID, Unit, CNTRCT_OWNG_ORG_NM, JOB_ROL_TYP_DESC, 
+         SKLST_TYP_DESC, CRE_T, WRK_CTY_NM, WRK_CNTRY_CD,
+         WTHDRW_CLOS_T, INDSTR_NM, OWNER_NOTES_ID, DELG_NOTES_ID, 
+         WRK_RMT_IND, BND_LOW, BND_HIGH, STRT_DT, END_DT, project.duration, PAY_TRVL_IND, Unit,
+         SET_TYP_CD, GBL_DEL_CTR_NM) %>%
   mutate(Open.Dummy = 'OPEN',
          Low.Band = BND_LOW, 
          High.Band = BND_HIGH, 
@@ -1086,16 +1676,28 @@ reporter <- data %>%
          Pay.Travel.Expenses = PAY_TRVL_IND)
 
 #merge with DUMB PREDICTION OUTPUTS
-reporter <- left_join(num.predictions, 
-                      reporter %>% mutate(OPNSET_POS_ID = as.factor(OPNSET_POS_ID)), 
-                      by = c('pos.id' = "OPNSET_POS_ID"))
+reporter <- left_join(num.predictions %>%
+                        mutate(SET_TYP_CD = ifelse(pos.id == 'NONE', 'GR', 'MP'),
+                               pos.id = ifelse(pos.id == 'NONE', 
+                                               as.character(GR.Position.ID), 
+                                               as.character(pos.id))) %>%
+                        select(-GR.Position.ID), 
+                      reporter, 
+                      by = c('pos.id' = "OPNSET_POS_ID", 'SET_TYP_CD'))
 
 #fix DUMB VARIABLE NAMES
 setnames(reporter, 
-         setdiff(colnames(reporter), c('Low.Band', 'High.Band', 'Opp.Industry', 'Business.Unit', 'Pay.Travel.Expenses')),
+         setdiff(colnames(reporter), c('Low.Band', 'High.Band', 
+                                       'Opp.Industry', 'Business.Unit', 'Pay.Travel.Expenses',
+                                       'SET_TYP_CD', 'GBL_DEL_CTR_NM')),
          c('Position.ID', 'Prediction', 'Probability', "Seat.ID", 'Unit', 'Sub.LOB','Job.Role', 
-           'Skillset', 'Create.Date', 'Work.City', 'Work.Country', 'Close.Date', 'Industry', 'Opp.Owner.ID', 'Delegate.Notes.ID',
-           'Work.Remotely', 'Band-low', 'Band-high', 'Start.Date', 'End.Date', 'Engagement.Duration', 'Pay.Travel', 'Status'))
+           'Skillset', 'Create.Date', 'Work.City', 'Work.Country', 'Close.Date',
+           'Industry', 'Opp.Owner.ID', 'Delegate.Notes.ID',
+           'Work.Remotely', 'Band-low', 'Band-high', 'Start.Date', 
+           'End.Date', 'Engagement.Duration', 'Pay.Travel', 'Status'))
+setnames(reporter,
+         c('SET_TYP_CD', 'GBL_DEL_CTR_NM'),
+         c('Position.Type', 'Global.Delivery.Center.'))
 
 reporter$Probability.percentage <- with(reporter, paste0(round(Probability, 2)*100, '%'))
 reporter$Subk.prob.flag <- with(reporter, ifelse(Probability >= .6, 'High Subk Likelihood',
@@ -1121,7 +1723,9 @@ names(reporter) <- gsub(x = names(reporter),
 #load workbook & figure out sheet names
 setwd("~/Demand Forecasting III/Templates")
 
-rep.arch <- 'C:/Users/SCIP2/Documents/Demand Forecasting III/Output Reports'
+#rep.arch <- 'C:/Users/SCIP2/Documents/Demand Forecasting III/Output Reports'
+
+rep.arch <- "C:/Users/SCIP2/Box Sync/Demand Forecasting (areyesm@us.ibm.com)/Country Reports"
 
 cartographer <- as.character(sort(unique(df$WRK_CNTRY_CD)))
 message(c('REPORTING ON THE FOLLOWING COUNTRIES:\n', paste0(cartographer, sep = '   ')))
@@ -1129,18 +1733,19 @@ message(c('REPORTING ON THE FOLLOWING COUNTRIES:\n', paste0(cartographer, sep = 
 reports <- paste0(rep.arch, '/', cartographer, '/', 
                   c(rep('30_day_', length(cartographer)), 
                     rep('60_day_', length(cartographer))), 
-                  cartographer, '_', 
-                  current.run, '.xlsx')
+                  cartographer, '.xlsx')
 
 sink('filenames.txt')
 cat(sort(reports), sep = '\n')
 sink()
 
-setwd("~/Demand Forecasting III/Archive")
+setwd("~/Demand Forecasting III/Archive/GR Test")
 save.image("30 day ws.RData")
 
 #TEMPORARY WD, CHANGE ONCE LOCATION IS STABLE
-main.Dir <- "~/Demand Forecasting III/Output Reports"
+main.Dir <- 'C:/Users/SCIP2/Box Sync/Demand Forecasting (areyesm@us.ibm.com)/Country Reports'
+#template directory:
+temple.Dir <- 'C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/Country Template/'
 
 #loop over all countries to dump csv data
 for(i in 1:length(cartographer)) {
@@ -1157,7 +1762,7 @@ for(i in 1:length(cartographer)) {
     filter(`Work Country` == cartographer[i])
   
   #open the 30 day template and paste REPORTER into DATA sheet
-  wb <- openxlsx::loadWorkbook(file = 'C:/Users/SCIP2/Documents/Demand Forecasting III/Templates/30 Day Subk Demand Forecast Report BLANK TEMPLATE.xlsx')
+  wb <- openxlsx::loadWorkbook(file = paste0(temple.Dir, '30_day_BLANK TEMPLATE_', cartographer[i], '.xlsx'))
   openxlsx::writeData(wb, "Data", 
                       rep.dump, 
                       startCol = 1, startRow = 1, rowNames = F)
@@ -1167,13 +1772,47 @@ for(i in 1:length(cartographer)) {
   unlink(dir(path = getwd(), pattern =  '30_day_'))
   #save country report
   openxlsx::saveWorkbook(wb = wb, 
-                        file = paste0('30_day_', cartographer[i],'_', current.run, '.xlsx'))
+                         file = paste0('30_day_', cartographer[i],'_', '.xlsx'))
   
   message(paste0('Dumped ', cartographer[i],'!!!'))
 }
 rm(rep.dump)
 
-setwd("~/Demand Forecasting III/Archive")
+send.it <- F
+setwd('C:/Users/SCIP2/Documents/Demand Forecasting III/Templates')
+sink(paste0('low_size_body','.txt'))
+print(current.run)
+print('clark is a SMELLLY butt')
+for(i in 1:length(cartographer)) {
+  ctry.dir <- file.path(main.Dir, cartographer[i])
+  dump.size <- file.info(paste0(ctry.dir, '/', '30_day_', cartographer[i],'_', '.xlsx'))$size/1000
+  
+  if(dump.size < 100) {
+    print(paste0(cartographer[i], ' file is very small (', dump.size,' kb)'))
+    send.it <- T
+  }
+}
+sink()
+
+if(send.it){
+  message('Sending Low File Size Warning!')
+  #send email if small file size
+  library(mailR, lib.loc = "C:/Program Files/R/Libraries")
+  
+  send.mail(from = "Demand_Forecast@scip.atl.dst.ibm.com",
+            to = list('areyesm@us.ibm.com', 'clark.llamzon@us.ibm.com'),
+            subject = "Demand Forecasting: Low File Size Warning",
+            body = paste(getwd(), 'low_size_body.txt', sep = '/'),
+            html = F,
+            smtp = list(host.name = "scip.atl.dst.ibm.com", port = 465, ssl=FALSE, 
+                        user.name = "Demand_Forecast@scip.atl.dst.ibm.com", passwd = "df2017"),
+            authenticate = TRUE,
+            send = TRUE)
+}
+
+
+
+setwd("C:/Users/SCIP2/Box Sync/Demand Forecasting (areyesm@us.ibm.com)/Archive")
 
 #make pretty importance chart
 library(ggplot2)
@@ -1195,7 +1834,7 @@ importance.plot <- ggplot(importance.tbl, aes(x = var, y = MeanDecreaseAccuracy,
         plot.title=element_text(face="bold",size=24))
 
 ggsave(plot= importance.plot,
-       paste0("30 day Random Forest feature importance", current.run, '.png'),
+       paste0("30 day Random Forest feature importance", '.png'),
        h=250,
        w=200,
        unit="mm",
