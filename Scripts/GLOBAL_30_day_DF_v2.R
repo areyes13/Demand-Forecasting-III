@@ -34,6 +34,7 @@ current.run <- Sys.Date()
 save(current.run, file = 'current run.saved')
 
 # 2A - LOAD DATA ---------------------------------------------------------------
+message('2A - LOAD DATA')
 fresh.data <- F
 save(fresh.data, file = 'fresh.data.saved')
 
@@ -708,6 +709,7 @@ candidate <- tbl_df(OPNSET_POS_CAND_T) %>%
 save(master, file = paste0('master ', '.saved'))
 
 # 2B - DATA REFRESH ----------------------------------------------------
+message('DATA REFRESH')
 #skip if first run-through
 skip <- file.exists('last.run.saved')
 
@@ -785,6 +787,7 @@ if(skip) {
   master <- tbls
 }
 # 2C - DATA PREP ----------------------------------------------------------
+message('2C - DATA PREP')
 start <- proc.time()
 save(start, file = 'start time.saved')
 rm(start)
@@ -878,6 +881,7 @@ data <- data %>%
 time.vortex <- filter(data, CRE_T > STRT_DT)
 
 # 2D - DATE CLEANUP -------------------------------------------------------
+message('2D - DATE CLEANUP')
 #put data for prediction into separate df and save for later
 filter30 <- function(start.date) {
   day30 <- current.run + days(30)
@@ -893,6 +897,7 @@ filter60 <- function(start.date) {
 }
 
 # 2E - CANDIDATE MAPPING --------------------------------------------------
+message('2E - CANDIDATE MAPPING')
 #set up helper function for NA values from casting
 replacer <- function(x) {
   values <- replace(x, is.na(x), 0)
@@ -951,6 +956,7 @@ fresh.data <- T
 save(fresh.data, file = 'fresh.data.saved')
 
 # 3A - JOB ROLE FEATURES ------------------------------------------------
+message('3A - JOB ROLE FEATURES')
 #collapse by JR to create new features
 jr.ft <- tbl_df(data) %>%
   filter(!is.na(WTHDRW_CLOS_T)) %>%
@@ -969,6 +975,7 @@ month.expanded <- left_join(month.expanded, jr.ft, by = c('JOB_ROL_TYP_DESC', 'O
          jr.count = replace(jr.count, is.na(jr.count), 0))
 
 # 3B - JRSS ACTUAL WEEKLY DEMAND TABLE ---------------------------------------------
+message('3B - JRSS ACTUAL WEEKLY DEMAND TABLE')
 #how many positions were ACTUALLY CLOSED/WITHDRAWN each month
 
 jrss.week <- tbl_df(data) %>%
@@ -1036,6 +1043,7 @@ week.expanded <- tbl_df(week.expanded) %>%
   select(-tot.lag, -sub.lag)
 
 # 3C - JRSS ACTUAL MONTHLY DEMAND TABLE  ----------------------------------------
+message('3C - JRSS ACTUAL MONTHLY DEMAND TABLE')
 #FIRST WE GET OUR MONTHLY JRSS ACTUALS
 #how many positions were ACTUALLY CLOSED/WITHDRAWN each month
 jrss.counter <- tbl_df(data) %>%
@@ -1100,6 +1108,7 @@ jrss.expanded <- tbl_df(jrss.expanded) %>%
   select(-tot.lag, -sub.lag)
 
 # 3D - JRSS PROJECTED MONTHLY DEMAND TABLE --------------------------------
+message('3D - JRSS PROJECTED MONTHLY DEMAND TABLE')
 #use the 'expanded' object we made in previous section
 setnames(expanded, 'Close.floor', 'OG.Start.floor')
 
@@ -1182,6 +1191,7 @@ df <- data
 save(df, file = '30 day df pre filter.saved')
 
 # 3E - TEST / TRAIN FILTER ------------------------------------------------
+message('3E - TEST / TRAIN FILTER')
 #need to split df by test/train to map in the last available JRSS values to prediction set
 df <- tbl_df(df) %>%
   #exclude dates beyond the time period we're projecting
@@ -1319,6 +1329,7 @@ proc.time() - start
 save(df, file = paste0('30 day observation tbl ', current.run, '.saved'))
 
 # 4A - PREP DATA FOR RANDOM FORESTS ------------------------------------------------------
+message('4A - PREP DATA FOR RANDOM FORESTS')
 df$Month <- with(df, lubridate::month(STRT_DT, label = T))
 df$Year <- with(df, lubridate::year(STRT_DT))
 df$GR.strt.mo <- with(df, lubridate::month(ONSIT_STRT_DT), label = T)
@@ -1367,6 +1378,7 @@ save(train, file = paste0('30 day train', current.run, '.saved'))
 #save last run date for using next refresh
 
 # 4B - TRAIN FACTOR FOREST ------------------------------------------------
+message('4B - TRAIN FACTOR FOREST ')
 #grab position IDs and JRSS for mapping back into RF outputs
 id <- data.frame(Position.ID = train$OPNSET_POS_ID,
                  GR.Position.ID = train$GR_OPNSET_POS_ID,
@@ -1418,6 +1430,7 @@ fact.out <- data.frame(predicted = fact.forest$predicted,
 fact.out <- cbind(id, fact.out)
 
 # 4c - TRAIN CONTINUOUS FOREST --------------------------------------------
+message('4c - TRAIN CONTINUOUS FOREST')
 #get the numeric vars
 library(dplyr)
 num.input <- train[num.inputvars] %>%
@@ -1469,6 +1482,7 @@ rownames(importance.tbl) <- NULL
 importance.tbl$var <- factor(importance.tbl$var, levels = importance.tbl$var[order(importance.tbl$MeanDecreaseAccuracy)])
 
 # 5A - PREDICT ------------------------------------------------------------
+message('5A - PREDICT')
 #select factor variables for PREDICTION SET
 test.facts <- testing[colnames(facts.input)]
 #get FACTOR predictions
@@ -1648,6 +1662,7 @@ if(run.this) {
 }
 
 # EXCEL OUTPUT ------------------------------------------------------------
+message('EXCEL OUTPUT')
 #library(XLConnect)
 
 #grab the vars we need for the DUMB REPORT
@@ -1720,6 +1735,8 @@ names(reporter) <- gsub(x = names(reporter),
                         pattern = "\\.",
                         replacement = " ")
 
+save(reporter, file = '30 day reporter.saved')
+
 #load workbook & figure out sheet names
 setwd("~/Demand Forecasting III/Templates")
 
@@ -1733,13 +1750,13 @@ message(c('REPORTING ON THE FOLLOWING COUNTRIES:\n', paste0(cartographer, sep = 
 reports <- paste0(rep.arch, '/', cartographer, '/', 
                   c(rep('30_day_', length(cartographer)), 
                     rep('60_day_', length(cartographer))), 
-                  cartographer, '.xlsx')
+                  cartographer, '_.xlsx')
 
 sink('filenames.txt')
 cat(sort(reports), sep = '\n')
 sink()
 
-setwd("~/Demand Forecasting III/Archive/GR Test")
+setwd("C:/Users/SCIP2/Box Sync/Demand Forecasting (areyesm@us.ibm.com)/Archive")
 save.image("30 day ws.RData")
 
 #TEMPORARY WD, CHANGE ONCE LOCATION IS STABLE
